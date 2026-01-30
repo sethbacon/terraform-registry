@@ -79,8 +79,9 @@ temp/
 *.tmp
 *.bak
 
-# Storage directories
-storage/
+# Storage directories (data storage, not source code)
+/storage/
+backend/storage/
 data/
 uploads/
 

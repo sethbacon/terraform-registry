@@ -5,6 +5,7 @@ go 1.22
 require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/golang-migrate/migrate/v4 v4.17.0
+	github.com/hashicorp/go-version v1.8.0
 	github.com/lib/pq v1.10.9
 	github.com/spf13/viper v1.18.2
 )

@@ -9,20 +9,23 @@ An enterprise-grade, self-hosted Terraform registry implementing all HashiCorp p
 ## Features
 
 ### Core Protocols
-- **Module Registry Protocol** - Publish and discover Terraform modules
-- **Provider Registry Protocol** - Distribute custom Terraform providers
-- **Provider Network Mirror Protocol** - Mirror providers for air-gapped environments
+
+- **✅ Module Registry Protocol** - Publish and discover Terraform modules (Phase 2 - Complete)
+- **Provider Registry Protocol** - Distribute custom Terraform providers (Phase 3 - Planned)
+- **Provider Network Mirror Protocol** - Mirror providers for air-gapped environments (Phase 3 - Planned)
 
 ### Backend
-- **Go Backend** with Gin framework for high performance
-- **PostgreSQL** database for robust metadata storage
-- **Multi-storage backends**:
-  - Azure Blob Storage
-  - S3-compatible storage (AWS S3, MinIO, etc.)
-  - Local filesystem
-- **GPG signature verification** for provider security
+
+- **✅ Go Backend** with Gin framework for high performance
+- **✅ PostgreSQL** database for robust metadata storage
+- **Storage backends**:
+  - **✅ Local filesystem** (Phase 2 - Complete)
+  - Azure Blob Storage (Planned)
+  - S3-compatible storage (AWS S3, MinIO, etc.) (Planned)
+- **GPG signature verification** for provider security (Phase 3 - Planned)
 
 ### Authentication & Authorization
+
 - **API Key authentication** for CLI and automation
 - **Azure AD / Entra ID** integration
 - **Generic OIDC** provider support (Okta, Auth0, Google, etc.)
@@ -30,6 +33,7 @@ An enterprise-grade, self-hosted Terraform registry implementing all HashiCorp p
 - **Multi-tenancy** support (configurable)
 
 ### Frontend
+
 - **React + TypeScript SPA** with Material-UI
 - Module and provider browsing with search
 - Web-based upload interface
@@ -38,17 +42,20 @@ An enterprise-grade, self-hosted Terraform registry implementing all HashiCorp p
 - Dark mode support
 
 ### DevOps Integration
+
 - **Azure DevOps extension** with OIDC authentication
 - Custom pipeline task for publishing
 - Service connection integration
 
 ### Deployment
+
 - Docker Compose for single-server deployments
 - Kubernetes with Helm charts
 - Azure Container Apps
 - Standalone binary
 
 ### Enterprise Features
+
 - OpenTelemetry instrumentation
 - Prometheus metrics
 - Structured logging
@@ -68,12 +75,14 @@ An enterprise-grade, self-hosted Terraform registry implementing all HashiCorp p
 ### Development Setup
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/your-org/terraform-registry.git
    cd terraform-registry
    ```
 
 2. **Set up PostgreSQL**
+
    ```bash
    # Using Docker
    docker run -d \
@@ -86,24 +95,28 @@ An enterprise-grade, self-hosted Terraform registry implementing all HashiCorp p
    ```
 
 3. **Configure the application**
+
    ```bash
    cp config.example.yaml config.yaml
    # Edit config.yaml with your settings
    ```
 
 4. **Run database migrations**
+
    ```bash
    cd backend
    go run cmd/server/main.go migrate up
    ```
 
 5. **Start the backend server**
+
    ```bash
    cd backend
    go run cmd/server/main.go serve
    ```
 
 6. **Start the frontend (development)**
+
    ```bash
    cd frontend
    npm install
@@ -111,8 +124,9 @@ An enterprise-grade, self-hosted Terraform registry implementing all HashiCorp p
    ```
 
 The application will be available at:
-- Backend API: http://localhost:8080
-- Frontend UI: http://localhost:5173
+
+- Backend API: <http://localhost:8080>
+- Frontend UI: <http://localhost:5173>
 
 ### Docker Compose Deployment
 
@@ -121,22 +135,53 @@ cd deployments
 docker-compose up -d
 ```
 
-Access the registry at http://localhost:8080
+Access the registry at <http://localhost:8080>
 
 ## Usage with Terraform
 
-### Modules
+### Publishing Modules (✅ Available Now)
 
-Configure Terraform to use your registry:
+Upload a module to the registry:
+
+```bash
+# Package your module
+tar -czf module.tar.gz -C /path/to/module .
+
+# Upload to registry
+curl -X POST http://localhost:8080/api/v1/modules \
+  -F "namespace=myorg" \
+  -F "name=vpc" \
+  -F "system=aws" \
+  -F "version=1.0.0" \
+  -F "description=My VPC module" \
+  -F "file=@module.tar.gz"
+```
+
+### Using Modules (✅ Available Now)
+
+Configure Terraform to use modules from your registry:
 
 ```hcl
-module "example" {
-  source  = "registry.example.com/namespace/module-name/aws"
+module "vpc" {
+  source  = "localhost:8080/myorg/vpc/aws"
   version = "1.0.0"
+
+  vpc_name = "production"
+  vpc_cidr = "10.0.0.0/16"
 }
 ```
 
-### Providers
+### Searching Modules (✅ Available Now)
+
+```bash
+# Search for modules
+curl "http://localhost:8080/api/v1/modules/search?q=vpc"
+
+# List versions
+curl "http://localhost:8080/v1/modules/myorg/vpc/aws/versions"
+```
+
+### Providers (Coming in Phase 3)
 
 Configure a provider from your registry:
 
@@ -151,7 +196,7 @@ terraform {
 }
 ```
 
-### Network Mirror
+### Network Mirror (Coming in Phase 3)
 
 Configure Terraform CLI to use your registry as a provider mirror:
 
@@ -193,26 +238,30 @@ See [Configuration Reference](docs/configuration.md) for complete details.
 ## API Endpoints
 
 ### Service Discovery
-```
+
+```cmd
 GET /.well-known/terraform.json
 ```
 
 ### Module Registry
-```
+
+```cmd
 GET  /v1/modules/:namespace/:name/:system/versions
 GET  /v1/modules/:namespace/:name/:system/:version/download
 POST /api/v1/modules (upload)
 ```
 
 ### Provider Registry
-```
+
+```cmd
 GET  /v1/providers/:namespace/:type/versions
 GET  /v1/providers/:namespace/:type/:version/download/:os/:arch
 POST /api/v1/providers (upload)
 ```
 
 ### Network Mirror
-```
+
+```cmd
 GET /v1/providers/:hostname/:namespace/:type/index.json
 GET /v1/providers/:hostname/:namespace/:type/:version.json
 ```
@@ -223,7 +272,7 @@ See [API Reference](docs/api-reference.md) for complete API documentation.
 
 ### Project Structure
 
-```
+```cmd
 terraform-registry/
 ├── backend/          # Go backend application
 ├── frontend/         # React TypeScript SPA
@@ -236,12 +285,14 @@ terraform-registry/
 ### Running Tests
 
 **Backend:**
+
 ```bash
 cd backend
 go test ./...
 ```
 
 **Frontend:**
+
 ```bash
 cd frontend
 npm test
@@ -250,18 +301,21 @@ npm test
 ### Building
 
 **Backend:**
+
 ```bash
 cd backend
 go build -o terraform-registry cmd/server/main.go
 ```
 
 **Frontend:**
+
 ```bash
 cd frontend
 npm run build
 ```
 
 **Docker Image:**
+
 ```bash
 docker build -t terraform-registry:latest .
 ```
@@ -282,7 +336,7 @@ Security is a top priority. We implement:
 - Audit logging for administrative actions
 - CORS policy enforcement
 
-Please report security vulnerabilities to security@example.com.
+Please report security vulnerabilities to <security@example.com>.
 
 ## License
 
@@ -303,18 +357,24 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Roadmap
 
-- [ ] Phase 1: Core backend and Module Registry (In Progress)
-- [ ] Phase 2: Provider Registry and Network Mirror
-- [ ] Phase 3: Authentication and Authorization
-- [ ] Phase 4: Frontend Web UI
-- [ ] Phase 5: Azure DevOps Extension
-- [ ] Phase 6: Kubernetes Deployment
-- [ ] Phase 7: Production Hardening
-- [ ] Phase 8: Performance Optimization
+- [x] Phase 1: Project Foundation & Backend Core (Complete)
+- [x] Phase 2: Module Registry Protocol (Complete)
+- [ ] Phase 3: Provider Registry and Network Mirror
+- [ ] Phase 4: Authentication and Authorization
+- [ ] Phase 5: Frontend Web UI
+- [ ] Phase 6: Azure DevOps Extension
+- [ ] Phase 7: Kubernetes Deployment
+- [ ] Phase 8: Production Hardening
+- [ ] Phase 9: Performance Optimization
 
 ## Status
 
-This project is under active development. Current phase: **Phase 1 - Project Foundation & Backend Core**
+This project is under active development. Current phase: **Phase 3 - Provider Registry and Network Mirror Protocol**
+
+**Completed Phases:**
+
+- ✅ Phase 1: Core backend infrastructure, database, configuration, Docker deployment
+- ✅ Phase 2: Complete Module Registry Protocol with storage abstraction layer
 
 ---
 

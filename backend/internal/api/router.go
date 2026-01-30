@@ -2,16 +2,29 @@ package api
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/terraform-registry/terraform-registry/internal/api/modules"
 	"github.com/terraform-registry/terraform-registry/internal/config"
+	"github.com/terraform-registry/terraform-registry/internal/storage"
+
+	// Import storage backends to register them
+	_ "github.com/terraform-registry/terraform-registry/internal/storage/local"
 )
 
 // NewRouter creates and configures the Gin router
 func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	router := gin.New()
+
+	// Initialize storage backend
+	storageBackend, err := storage.NewStorage(cfg)
+	if err != nil {
+		log.Fatalf("Failed to initialize storage backend: %v", err)
+	}
+	log.Printf("Initialized storage backend: %s", cfg.Storage.DefaultBackend)
 
 	// Add middleware
 	router.Use(gin.Recovery())
@@ -30,20 +43,15 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	// API version
 	router.GET("/version", versionHandler())
 
-	// Module Registry endpoints (v1)
+	// Module Registry endpoints (v1) - Terraform Protocol
 	v1Modules := router.Group("/v1/modules")
 	{
-		v1Modules.GET("/:namespace/:name/:system/versions", func(c *gin.Context) {
-			c.JSON(http.StatusNotImplemented, gin.H{
-				"error": "Module Registry endpoints coming in Phase 2",
-			})
-		})
-		v1Modules.GET("/:namespace/:name/:system/:version/download", func(c *gin.Context) {
-			c.JSON(http.StatusNotImplemented, gin.H{
-				"error": "Module Registry endpoints coming in Phase 2",
-			})
-		})
+		v1Modules.GET("/:namespace/:name/:system/versions", modules.ListVersionsHandler(db, cfg))
+		v1Modules.GET("/:namespace/:name/:system/:version/download", modules.DownloadHandler(db, storageBackend, cfg))
 	}
+
+	// File serving endpoint for local storage with ServeDirectly enabled
+	router.GET("/v1/files/*filepath", modules.ServeFileHandler(storageBackend, cfg))
 
 	// Provider Registry endpoints (v1)
 	// These are for the standard Provider Registry Protocol
@@ -81,31 +89,28 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	// Admin API endpoints
 	apiV1 := router.Group("/api/v1")
 	{
-		// Modules admin endpoints
-		apiV1.GET("/modules", func(c *gin.Context) {
-			c.JSON(http.StatusNotImplemented, gin.H{
-				"error": "Admin API endpoints coming in Phase 5",
-			})
-		})
+		// Modules admin endpoints - Phase 2
+		apiV1.POST("/modules", modules.UploadHandler(db, storageBackend, cfg))
+		apiV1.GET("/modules/search", modules.SearchHandler(db, cfg))
 
 		// Providers admin endpoints
 		apiV1.GET("/providers", func(c *gin.Context) {
 			c.JSON(http.StatusNotImplemented, gin.H{
-				"error": "Admin API endpoints coming in Phase 5",
+				"error": "Provider admin endpoints coming in Phase 3",
 			})
 		})
 
 		// Users admin endpoints
 		apiV1.GET("/users", func(c *gin.Context) {
 			c.JSON(http.StatusNotImplemented, gin.H{
-				"error": "Admin API endpoints coming in Phase 4",
+				"error": "User admin endpoints coming in Phase 4",
 			})
 		})
 
 		// Organizations admin endpoints
 		apiV1.GET("/organizations", func(c *gin.Context) {
 			c.JSON(http.StatusNotImplemented, gin.H{
-				"error": "Admin API endpoints coming in Phase 4",
+				"error": "Organization admin endpoints coming in Phase 4",
 			})
 		})
 	}
