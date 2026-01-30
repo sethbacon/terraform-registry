@@ -1,0 +1,487 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/spf13/viper"
+)
+
+// Config holds all application configuration
+type Config struct {
+	Server        ServerConfig        `mapstructure:"server"`
+	Database      DatabaseConfig      `mapstructure:"database"`
+	Storage       StorageConfig       `mapstructure:"storage"`
+	Auth          AuthConfig          `mapstructure:"auth"`
+	MultiTenancy  MultiTenancyConfig  `mapstructure:"multi_tenancy"`
+	Security      SecurityConfig      `mapstructure:"security"`
+	Logging       LoggingConfig       `mapstructure:"logging"`
+	Telemetry     TelemetryConfig     `mapstructure:"telemetry"`
+}
+
+// ServerConfig holds HTTP server configuration
+type ServerConfig struct {
+	Host         string        `mapstructure:"host"`
+	Port         int           `mapstructure:"port"`
+	BaseURL      string        `mapstructure:"base_url"`
+	ReadTimeout  time.Duration `mapstructure:"read_timeout"`
+	WriteTimeout time.Duration `mapstructure:"write_timeout"`
+}
+
+// DatabaseConfig holds database connection configuration
+type DatabaseConfig struct {
+	Host           string `mapstructure:"host"`
+	Port           int    `mapstructure:"port"`
+	Name           string `mapstructure:"name"`
+	User           string `mapstructure:"user"`
+	Password       string `mapstructure:"password"`
+	SSLMode        string `mapstructure:"ssl_mode"`
+	MaxConnections int    `mapstructure:"max_connections"`
+}
+
+// StorageConfig holds storage backend configuration
+type StorageConfig struct {
+	DefaultBackend string              `mapstructure:"default_backend"`
+	Azure          AzureStorageConfig  `mapstructure:"azure"`
+	S3             S3StorageConfig     `mapstructure:"s3"`
+	Local          LocalStorageConfig  `mapstructure:"local"`
+}
+
+// AzureStorageConfig holds Azure Blob Storage configuration
+type AzureStorageConfig struct {
+	AccountName   string `mapstructure:"account_name"`
+	AccountKey    string `mapstructure:"account_key"`
+	ContainerName string `mapstructure:"container_name"`
+	CDNURL        string `mapstructure:"cdn_url"`
+}
+
+// S3StorageConfig holds S3-compatible storage configuration
+type S3StorageConfig struct {
+	Endpoint        string `mapstructure:"endpoint"`
+	Region          string `mapstructure:"region"`
+	Bucket          string `mapstructure:"bucket"`
+	AccessKeyID     string `mapstructure:"access_key_id"`
+	SecretAccessKey string `mapstructure:"secret_access_key"`
+}
+
+// LocalStorageConfig holds local filesystem storage configuration
+type LocalStorageConfig struct {
+	BasePath      string `mapstructure:"base_path"`
+	ServeDirectly bool   `mapstructure:"serve_directly"`
+}
+
+// AuthConfig holds authentication configuration
+type AuthConfig struct {
+	APIKeys  APIKeyConfig  `mapstructure:"api_keys"`
+	OIDC     OIDCConfig    `mapstructure:"oidc"`
+	AzureAD  AzureADConfig `mapstructure:"azure_ad"`
+}
+
+// APIKeyConfig holds API key authentication configuration
+type APIKeyConfig struct {
+	Enabled bool   `mapstructure:"enabled"`
+	Prefix  string `mapstructure:"prefix"`
+}
+
+// OIDCConfig holds generic OIDC provider configuration
+type OIDCConfig struct {
+	Enabled      bool     `mapstructure:"enabled"`
+	IssuerURL    string   `mapstructure:"issuer_url"`
+	ClientID     string   `mapstructure:"client_id"`
+	ClientSecret string   `mapstructure:"client_secret"`
+	RedirectURL  string   `mapstructure:"redirect_url"`
+	Scopes       []string `mapstructure:"scopes"`
+}
+
+// AzureADConfig holds Azure AD specific configuration
+type AzureADConfig struct {
+	Enabled      bool   `mapstructure:"enabled"`
+	TenantID     string `mapstructure:"tenant_id"`
+	ClientID     string `mapstructure:"client_id"`
+	ClientSecret string `mapstructure:"client_secret"`
+	RedirectURL  string `mapstructure:"redirect_url"`
+}
+
+// MultiTenancyConfig holds multi-tenancy configuration
+type MultiTenancyConfig struct {
+	Enabled             bool   `mapstructure:"enabled"`
+	DefaultOrganization string `mapstructure:"default_organization"`
+	AllowPublicSignup   bool   `mapstructure:"allow_public_signup"`
+}
+
+// SecurityConfig holds security-related configuration
+type SecurityConfig struct {
+	CORS         CORSConfig         `mapstructure:"cors"`
+	RateLimiting RateLimitingConfig `mapstructure:"rate_limiting"`
+	TLS          TLSConfig          `mapstructure:"tls"`
+}
+
+// CORSConfig holds CORS configuration
+type CORSConfig struct {
+	AllowedOrigins []string `mapstructure:"allowed_origins"`
+	AllowedMethods []string `mapstructure:"allowed_methods"`
+}
+
+// RateLimitingConfig holds rate limiting configuration
+type RateLimitingConfig struct {
+	Enabled            bool `mapstructure:"enabled"`
+	RequestsPerMinute  int  `mapstructure:"requests_per_minute"`
+	Burst              int  `mapstructure:"burst"`
+}
+
+// TLSConfig holds TLS/HTTPS configuration
+type TLSConfig struct {
+	Enabled  bool   `mapstructure:"enabled"`
+	CertFile string `mapstructure:"cert_file"`
+	KeyFile  string `mapstructure:"key_file"`
+}
+
+// LoggingConfig holds logging configuration
+type LoggingConfig struct {
+	Level  string `mapstructure:"level"`
+	Format string `mapstructure:"format"`
+	Output string `mapstructure:"output"`
+}
+
+// TelemetryConfig holds observability configuration
+type TelemetryConfig struct {
+	Enabled     bool             `mapstructure:"enabled"`
+	ServiceName string           `mapstructure:"service_name"`
+	Metrics     MetricsConfig    `mapstructure:"metrics"`
+	Tracing     TracingConfig    `mapstructure:"tracing"`
+	Profiling   ProfilingConfig  `mapstructure:"profiling"`
+}
+
+// MetricsConfig holds Prometheus metrics configuration
+type MetricsConfig struct {
+	Enabled        bool `mapstructure:"enabled"`
+	PrometheusPort int  `mapstructure:"prometheus_port"`
+}
+
+// TracingConfig holds distributed tracing configuration
+type TracingConfig struct {
+	Enabled        bool   `mapstructure:"enabled"`
+	JaegerEndpoint string `mapstructure:"jaeger_endpoint"`
+}
+
+// ProfilingConfig holds profiling configuration
+type ProfilingConfig struct {
+	Enabled bool `mapstructure:"enabled"`
+	Port    int  `mapstructure:"port"`
+}
+
+// bindEnvVars explicitly binds environment variables to config keys
+// This is necessary because AutomaticEnv() doesn't work well with nested structs during Unmarshal
+func bindEnvVars(v *viper.Viper) {
+	// Database
+	v.BindEnv("database.host")
+	v.BindEnv("database.port")
+	v.BindEnv("database.name")
+	v.BindEnv("database.user")
+	v.BindEnv("database.password")
+	v.BindEnv("database.ssl_mode")
+	v.BindEnv("database.max_connections")
+
+	// Server
+	v.BindEnv("server.host")
+	v.BindEnv("server.port")
+	v.BindEnv("server.base_url")
+	v.BindEnv("server.read_timeout")
+	v.BindEnv("server.write_timeout")
+
+	// Storage
+	v.BindEnv("storage.default_backend")
+	v.BindEnv("storage.azure.account_name")
+	v.BindEnv("storage.azure.account_key")
+	v.BindEnv("storage.azure.container_name")
+	v.BindEnv("storage.azure.cdn_url")
+	v.BindEnv("storage.s3.endpoint")
+	v.BindEnv("storage.s3.region")
+	v.BindEnv("storage.s3.bucket")
+	v.BindEnv("storage.s3.access_key_id")
+	v.BindEnv("storage.s3.secret_access_key")
+	v.BindEnv("storage.local.base_path")
+	v.BindEnv("storage.local.serve_directly")
+
+	// Auth
+	v.BindEnv("auth.api_keys.enabled")
+	v.BindEnv("auth.api_keys.prefix")
+	v.BindEnv("auth.oidc.enabled")
+	v.BindEnv("auth.oidc.issuer_url")
+	v.BindEnv("auth.oidc.client_id")
+	v.BindEnv("auth.oidc.client_secret")
+	v.BindEnv("auth.oidc.redirect_url")
+	v.BindEnv("auth.oidc.scopes")
+	v.BindEnv("auth.azure_ad.enabled")
+	v.BindEnv("auth.azure_ad.tenant_id")
+	v.BindEnv("auth.azure_ad.client_id")
+	v.BindEnv("auth.azure_ad.client_secret")
+	v.BindEnv("auth.azure_ad.redirect_url")
+
+	// Multi-tenancy
+	v.BindEnv("multi_tenancy.enabled")
+	v.BindEnv("multi_tenancy.default_organization")
+	v.BindEnv("multi_tenancy.allow_public_signup")
+
+	// Security
+	v.BindEnv("security.cors.allowed_origins")
+	v.BindEnv("security.cors.allowed_methods")
+	v.BindEnv("security.rate_limiting.enabled")
+	v.BindEnv("security.rate_limiting.requests_per_minute")
+	v.BindEnv("security.rate_limiting.burst")
+	v.BindEnv("security.tls.enabled")
+	v.BindEnv("security.tls.cert_file")
+	v.BindEnv("security.tls.key_file")
+
+	// Logging
+	v.BindEnv("logging.level")
+	v.BindEnv("logging.format")
+	v.BindEnv("logging.output")
+
+	// Telemetry
+	v.BindEnv("telemetry.enabled")
+	v.BindEnv("telemetry.service_name")
+	v.BindEnv("telemetry.metrics.enabled")
+	v.BindEnv("telemetry.metrics.prometheus_port")
+	v.BindEnv("telemetry.tracing.enabled")
+	v.BindEnv("telemetry.tracing.jaeger_endpoint")
+	v.BindEnv("telemetry.profiling.enabled")
+	v.BindEnv("telemetry.profiling.port")
+}
+
+// Load loads configuration from file and environment variables
+func Load(configPath string) (*Config, error) {
+	v := viper.New()
+
+	// Set default values
+	setDefaults(v)
+
+	// Set config file path if provided
+	if configPath != "" {
+		v.SetConfigFile(configPath)
+	} else {
+		// Look for config.yaml in common locations
+		v.SetConfigName("config")
+		v.SetConfigType("yaml")
+		v.AddConfigPath(".")
+		v.AddConfigPath("./config")
+		v.AddConfigPath("/etc/terraform-registry")
+	}
+
+	// Read config file
+	if err := v.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return nil, fmt.Errorf("error reading config file: %w", err)
+		}
+		// Config file not found; use defaults and environment variables
+	}
+
+	// Enable environment variable support
+	v.SetEnvPrefix("TFR")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+
+	// Explicitly bind environment variables for nested structures
+	// This is necessary because AutomaticEnv() doesn't work well with Unmarshal()
+	bindEnvVars(v)
+
+	// Unmarshal configuration
+	var cfg Config
+	if err := v.Unmarshal(&cfg); err != nil {
+		return nil, fmt.Errorf("error unmarshaling config: %w", err)
+	}
+
+	// Expand environment variables in sensitive fields
+	cfg.Database.Password = expandEnv(cfg.Database.Password)
+	cfg.Storage.Azure.AccountKey = expandEnv(cfg.Storage.Azure.AccountKey)
+	cfg.Storage.S3.AccessKeyID = expandEnv(cfg.Storage.S3.AccessKeyID)
+	cfg.Storage.S3.SecretAccessKey = expandEnv(cfg.Storage.S3.SecretAccessKey)
+	cfg.Auth.OIDC.ClientSecret = expandEnv(cfg.Auth.OIDC.ClientSecret)
+	cfg.Auth.AzureAD.ClientSecret = expandEnv(cfg.Auth.AzureAD.ClientSecret)
+
+	// Validate configuration
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	return &cfg, nil
+}
+
+// setDefaults sets default configuration values
+func setDefaults(v *viper.Viper) {
+	// Server defaults
+	v.SetDefault("server.host", "0.0.0.0")
+	v.SetDefault("server.port", 8080)
+	v.SetDefault("server.base_url", "http://localhost:8080")
+	v.SetDefault("server.read_timeout", "30s")
+	v.SetDefault("server.write_timeout", "30s")
+
+	// Database defaults
+	v.SetDefault("database.host", "localhost")
+	v.SetDefault("database.port", 5432)
+	v.SetDefault("database.name", "terraform_registry")
+	v.SetDefault("database.user", "registry")
+	v.SetDefault("database.ssl_mode", "require")
+	v.SetDefault("database.max_connections", 25)
+
+	// Storage defaults
+	v.SetDefault("storage.default_backend", "local")
+	v.SetDefault("storage.local.base_path", "./storage")
+	v.SetDefault("storage.local.serve_directly", true)
+
+	// Auth defaults
+	v.SetDefault("auth.api_keys.enabled", true)
+	v.SetDefault("auth.api_keys.prefix", "tfr_")
+	v.SetDefault("auth.oidc.enabled", false)
+	v.SetDefault("auth.oidc.scopes", []string{"openid", "email", "profile"})
+	v.SetDefault("auth.azure_ad.enabled", false)
+
+	// Multi-tenancy defaults
+	v.SetDefault("multi_tenancy.enabled", false)
+	v.SetDefault("multi_tenancy.default_organization", "default")
+	v.SetDefault("multi_tenancy.allow_public_signup", false)
+
+	// Security defaults
+	v.SetDefault("security.cors.allowed_origins", []string{"*"})
+	v.SetDefault("security.cors.allowed_methods", []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"})
+	v.SetDefault("security.rate_limiting.enabled", true)
+	v.SetDefault("security.rate_limiting.requests_per_minute", 60)
+	v.SetDefault("security.rate_limiting.burst", 10)
+	v.SetDefault("security.tls.enabled", false)
+
+	// Logging defaults
+	v.SetDefault("logging.level", "info")
+	v.SetDefault("logging.format", "json")
+	v.SetDefault("logging.output", "stdout")
+
+	// Telemetry defaults
+	v.SetDefault("telemetry.enabled", true)
+	v.SetDefault("telemetry.service_name", "terraform-registry")
+	v.SetDefault("telemetry.metrics.enabled", true)
+	v.SetDefault("telemetry.metrics.prometheus_port", 9090)
+	v.SetDefault("telemetry.tracing.enabled", false)
+	v.SetDefault("telemetry.profiling.enabled", false)
+	v.SetDefault("telemetry.profiling.port", 6060)
+}
+
+// expandEnv expands environment variables in the format ${VAR_NAME}
+func expandEnv(s string) string {
+	return os.ExpandEnv(s)
+}
+
+// Validate validates the configuration
+func (c *Config) Validate() error {
+	// Validate server
+	if c.Server.Port < 1 || c.Server.Port > 65535 {
+		return fmt.Errorf("invalid server port: %d", c.Server.Port)
+	}
+	if c.Server.BaseURL == "" {
+		return fmt.Errorf("server.base_url is required")
+	}
+
+	// Validate database
+	if c.Database.Host == "" {
+		return fmt.Errorf("database.host is required")
+	}
+	if c.Database.Name == "" {
+		return fmt.Errorf("database.name is required")
+	}
+	if c.Database.User == "" {
+		return fmt.Errorf("database.user is required")
+	}
+
+	// Validate storage backend
+	validBackends := map[string]bool{"azure": true, "s3": true, "local": true}
+	if !validBackends[c.Storage.DefaultBackend] {
+		return fmt.Errorf("invalid storage backend: %s (must be azure, s3, or local)", c.Storage.DefaultBackend)
+	}
+
+	// Validate Azure storage if enabled
+	if c.Storage.DefaultBackend == "azure" {
+		if c.Storage.Azure.AccountName == "" {
+			return fmt.Errorf("storage.azure.account_name is required when using Azure backend")
+		}
+		if c.Storage.Azure.AccountKey == "" {
+			return fmt.Errorf("storage.azure.account_key is required when using Azure backend")
+		}
+		if c.Storage.Azure.ContainerName == "" {
+			return fmt.Errorf("storage.azure.container_name is required when using Azure backend")
+		}
+	}
+
+	// Validate S3 storage if enabled
+	if c.Storage.DefaultBackend == "s3" {
+		if c.Storage.S3.Bucket == "" {
+			return fmt.Errorf("storage.s3.bucket is required when using S3 backend")
+		}
+		if c.Storage.S3.Region == "" {
+			return fmt.Errorf("storage.s3.region is required when using S3 backend")
+		}
+	}
+
+	// Validate local storage if enabled
+	if c.Storage.DefaultBackend == "local" {
+		if c.Storage.Local.BasePath == "" {
+			return fmt.Errorf("storage.local.base_path is required when using local backend")
+		}
+	}
+
+	// Validate OIDC if enabled
+	if c.Auth.OIDC.Enabled {
+		if c.Auth.OIDC.IssuerURL == "" {
+			return fmt.Errorf("auth.oidc.issuer_url is required when OIDC is enabled")
+		}
+		if c.Auth.OIDC.ClientID == "" {
+			return fmt.Errorf("auth.oidc.client_id is required when OIDC is enabled")
+		}
+		if c.Auth.OIDC.ClientSecret == "" {
+			return fmt.Errorf("auth.oidc.client_secret is required when OIDC is enabled")
+		}
+	}
+
+	// Validate Azure AD if enabled
+	if c.Auth.AzureAD.Enabled {
+		if c.Auth.AzureAD.TenantID == "" {
+			return fmt.Errorf("auth.azure_ad.tenant_id is required when Azure AD is enabled")
+		}
+		if c.Auth.AzureAD.ClientID == "" {
+			return fmt.Errorf("auth.azure_ad.client_id is required when Azure AD is enabled")
+		}
+		if c.Auth.AzureAD.ClientSecret == "" {
+			return fmt.Errorf("auth.azure_ad.client_secret is required when Azure AD is enabled")
+		}
+	}
+
+	// Validate TLS if enabled
+	if c.Security.TLS.Enabled {
+		if c.Security.TLS.CertFile == "" {
+			return fmt.Errorf("security.tls.cert_file is required when TLS is enabled")
+		}
+		if c.Security.TLS.KeyFile == "" {
+			return fmt.Errorf("security.tls.key_file is required when TLS is enabled")
+		}
+	}
+
+	// Validate logging level
+	validLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
+	if !validLevels[c.Logging.Level] {
+		return fmt.Errorf("invalid logging level: %s (must be debug, info, warn, or error)", c.Logging.Level)
+	}
+
+	return nil
+}
+
+// GetDSN returns the PostgreSQL connection string
+func (c *DatabaseConfig) GetDSN() string {
+	return fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		c.Host, c.Port, c.User, c.Password, c.Name, c.SSLMode,
+	)
+}
+
+// GetAddress returns the server address in host:port format
+func (c *ServerConfig) GetAddress() string {
+	return fmt.Sprintf("%s:%d", c.Host, c.Port)
+}
