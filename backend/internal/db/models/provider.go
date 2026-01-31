@@ -1,0 +1,42 @@
+package models
+
+import "time"
+
+// Provider represents a Terraform provider in the registry
+type Provider struct {
+	ID             string
+	OrganizationID string
+	Namespace      string
+	Type           string
+	Description    *string
+	Source         *string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+// ProviderVersion represents a specific version of a provider
+type ProviderVersion struct {
+	ID                  string
+	ProviderID          string
+	Version             string
+	Protocols           []string // JSON array of supported Terraform protocol versions (e.g. ["4.0", "5.0"])
+	GPGPublicKey        string   // PEM-encoded GPG public key for signature verification
+	ShasumURL           string   // URL to SHA256SUMS file
+	ShasumSignatureURL  string   // URL to SHA256SUMS.sig file
+	PublishedBy         *string  // User ID who published this version
+	CreatedAt           time.Time
+}
+
+// ProviderPlatform represents a platform-specific binary for a provider version
+type ProviderPlatform struct {
+	ID                 string
+	ProviderVersionID  string
+	OS                 string  // Operating system (linux, darwin, windows, etc.)
+	Arch               string  // Architecture (amd64, arm64, 386, etc.)
+	Filename           string  // Original filename of the provider binary
+	StoragePath        string  // Path in storage backend
+	StorageBackend     string  // Storage backend type (local, azure, s3)
+	SizeBytes          int64   // File size in bytes
+	Shasum             string  // SHA256 checksum of the binary
+	DownloadCount      int64   // Number of times this platform binary has been downloaded
+}

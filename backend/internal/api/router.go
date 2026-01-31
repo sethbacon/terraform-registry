@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/terraform-registry/terraform-registry/internal/api/mirror"
 	"github.com/terraform-registry/terraform-registry/internal/api/modules"
+	"github.com/terraform-registry/terraform-registry/internal/api/providers"
 	"github.com/terraform-registry/terraform-registry/internal/config"
 	"github.com/terraform-registry/terraform-registry/internal/storage"
 
@@ -57,16 +59,8 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	// These are for the standard Provider Registry Protocol
 	v1Providers := router.Group("/v1/providers")
 	{
-		v1Providers.GET("/:namespace/:type/versions", func(c *gin.Context) {
-			c.JSON(http.StatusNotImplemented, gin.H{
-				"error": "Provider Registry endpoints coming in Phase 3",
-			})
-		})
-		v1Providers.GET("/:namespace/:type/:version/download/:os/:arch", func(c *gin.Context) {
-			c.JSON(http.StatusNotImplemented, gin.H{
-				"error": "Provider Registry endpoints coming in Phase 3",
-			})
-		})
+		v1Providers.GET("/:namespace/:type/versions", providers.ListVersionsHandler(db, cfg))
+		v1Providers.GET("/:namespace/:type/:version/download/:os/:arch", providers.DownloadHandler(db, storageBackend, cfg))
 	}
 
 	// Network Mirror endpoints (separate from Provider Registry to avoid routing conflicts)
@@ -74,16 +68,8 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	// They use a different path structure: /terraform/providers/:hostname/:namespace/:type/...
 	v1Mirror := router.Group("/terraform/providers")
 	{
-		v1Mirror.GET("/:hostname/:namespace/:type/index.json", func(c *gin.Context) {
-			c.JSON(http.StatusNotImplemented, gin.H{
-				"error": "Network Mirror endpoints coming in Phase 3",
-			})
-		})
-		v1Mirror.GET("/:hostname/:namespace/:type/:version.json", func(c *gin.Context) {
-			c.JSON(http.StatusNotImplemented, gin.H{
-				"error": "Network Mirror endpoints coming in Phase 3",
-			})
-		})
+		v1Mirror.GET("/:hostname/:namespace/:type/index.json", mirror.IndexHandler(db, cfg))
+		v1Mirror.GET("/:hostname/:namespace/:type/:versionfile", mirror.PlatformIndexHandler(db, cfg))
 	}
 
 	// Admin API endpoints
@@ -93,12 +79,9 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 		apiV1.POST("/modules", modules.UploadHandler(db, storageBackend, cfg))
 		apiV1.GET("/modules/search", modules.SearchHandler(db, cfg))
 
-		// Providers admin endpoints
-		apiV1.GET("/providers", func(c *gin.Context) {
-			c.JSON(http.StatusNotImplemented, gin.H{
-				"error": "Provider admin endpoints coming in Phase 3",
-			})
-		})
+		// Providers admin endpoints - Phase 3
+		apiV1.POST("/providers", providers.UploadHandler(db, storageBackend, cfg))
+		apiV1.GET("/providers/search", providers.SearchHandler(db, cfg))
 
 		// Users admin endpoints
 		apiV1.GET("/users", func(c *gin.Context) {

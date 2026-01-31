@@ -1,0 +1,92 @@
+package providers
+
+import (
+	"database/sql"
+	"net/http"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+	"github.com/terraform-registry/terraform-registry/internal/config"
+	"github.com/terraform-registry/terraform-registry/internal/db/repositories"
+)
+
+// SearchHandler handles provider search requests
+// Implements: GET /api/v1/providers/search?q=<query>&namespace=<namespace>&limit=<limit>&offset=<offset>
+func SearchHandler(db *sql.DB, cfg *config.Config) gin.HandlerFunc {
+	providerRepo := repositories.NewProviderRepository(db)
+	orgRepo := repositories.NewOrganizationRepository(db)
+
+	return func(c *gin.Context) {
+		// Get query parameters
+		query := c.Query("q")
+		namespace := c.Query("namespace")
+
+		// Pagination parameters
+		limitStr := c.DefaultQuery("limit", "20")
+		offsetStr := c.DefaultQuery("offset", "0")
+
+		limit, err := strconv.Atoi(limitStr)
+		if err != nil || limit < 1 || limit > 100 {
+			limit = 20 // Default to 20, max 100
+		}
+
+		offset, err := strconv.Atoi(offsetStr)
+		if err != nil || offset < 0 {
+			offset = 0
+		}
+
+		// Get organization context
+		org, err := orgRepo.GetDefaultOrganization(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to get organization context",
+			})
+			return
+		}
+		if org == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Default organization not found",
+			})
+			return
+		}
+
+		// Search providers
+		providers, total, err := providerRepo.SearchProviders(
+			c.Request.Context(),
+			org.ID,
+			query,
+			namespace,
+			limit,
+			offset,
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to search providers",
+			})
+			return
+		}
+
+		// Format results
+		results := make([]gin.H, len(providers))
+		for i, p := range providers {
+			results[i] = gin.H{
+				"id":          p.ID,
+				"namespace":   p.Namespace,
+				"type":        p.Type,
+				"description": p.Description,
+				"source":      p.Source,
+				"created_at":  p.CreatedAt,
+				"updated_at":  p.UpdatedAt,
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"providers": results,
+			"meta": gin.H{
+				"limit":  limit,
+				"offset": offset,
+				"total":  total,
+			},
+		})
+	}
+}

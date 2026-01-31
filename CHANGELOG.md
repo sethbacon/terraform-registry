@@ -7,6 +7,100 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-01-30
+
+### Added - Phase 3: Provider Registry & Network Mirror Protocol
+
+#### Data Models
+
+- Provider model with namespace, type, description, and source fields
+- ProviderVersion model with protocols (JSONB array), GPG public key support
+- ProviderPlatform model for multi-platform binary support (OS/arch matrix)
+- Three-level hierarchy: Provider → Version → Platform
+
+#### Repository Layer
+
+- ProviderRepository with full CRUD operations
+- Provider version management with protocol versioning support
+- Platform binary tracking per OS/arch combination
+- Search functionality with namespace filtering
+- Download count tracking per platform
+- JSONB array handling for Terraform protocol versions
+
+#### Validation Layer
+
+- GPG public key format validation (PEM-encoded)
+- Platform (OS/arch) validation with supported combinations
+- Provider binary validation (ZIP format, magic bytes, size limits)
+- Maximum provider binary size limit (500MB)
+- Checksum extraction from SHA256SUMS files
+
+#### Provider Registry Protocol Handlers
+
+- **List Provider Versions**: `GET /v1/providers/:namespace/:type/versions`
+  - Returns JSON with versions, protocols, and platforms array
+  - Multi-platform support per version
+- **Download Provider**: `GET /v1/providers/:namespace/:type/:version/download/:os/:arch`
+  - JSON response with download_url, shasum, protocols, signing_keys
+  - GPG public key included in signing_keys object
+  - Platform-specific download tracking
+- **Upload Provider**: `POST /api/v1/providers`
+  - Multipart form upload with namespace, type, version, os, arch
+  - Protocol version array support (e.g., ["5.0", "6.0"])
+  - GPG public key acceptance and storage
+  - Duplicate platform detection (409 Conflict)
+  - Automatic provider/version creation
+- **Search Providers**: `GET /api/v1/providers/search`
+  - Query by namespace, type, or description
+  - Pagination support (limit/offset)
+
+#### Network Mirror Protocol Handlers
+
+- **Version Index**: `GET /terraform/providers/:hostname/:namespace/:type/index.json`
+  - Returns simple version map for air-gapped environments
+  - Hostname parameter for origin registry compatibility
+- **Platform Index**: `GET /terraform/providers/:hostname/:namespace/:type/:version.json`
+  - Returns archives object with platform-specific URLs and hashes
+  - SHA256 hashes in h1: format (base64-encoded)
+  - Support for ZIP hash format (zh:)
+  - Relative or absolute URLs based on storage configuration
+
+#### File Serving
+
+- Provider binary downloads via `/v1/files/providers/...`
+- Streaming support for large binaries (50MB+)
+- SHA256 checksum headers
+- Content-Type: application/zip
+
+#### Router Updates
+
+- Integrated all provider and mirror handlers
+- Fixed Gin routing conflict with `.json` suffix in version parameter
+- Proper route precedence for index.json vs version files
+
+### Technical Details
+
+- **New Files**: 12 files (~2,000 lines of Go code)
+- **Protocols**: Terraform Provider Registry Protocol v1 + Network Mirror Protocol v1
+- **Storage**: Reused Phase 2 storage abstraction layer
+- **Patterns**: Handler factory, repository pattern, async download tracking
+
+### Testing
+
+- Tested with real HashiCorp azurerm provider (v3.85.0, 55MB)
+- Built and uploaded custom provider from terraform-provider-scaffolding-framework
+- Verified all Provider Registry Protocol endpoints
+- Verified all Network Mirror Protocol endpoints
+- Confirmed 55MB+ binary downloads working
+- Multi-platform support tested (linux/amd64, windows/amd64)
+- Protocol versions 5.0 and 6.0 tested
+
+### Bug Fixes
+
+- Fixed Gin routing conflict between `/:version.json` literal and parameter parsing
+- Changed route to `/:versionfile` with suffix stripping in handler
+- Network Mirror Protocol endpoints now correctly parse version from URL
+
 ## [0.2.0] - 2026-01-30
 
 ### Added - Phase 2: Module Registry Protocol
