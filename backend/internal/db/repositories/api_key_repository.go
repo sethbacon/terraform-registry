@@ -307,3 +307,52 @@ func (r *APIKeyRepository) GetAPIKeysByPrefix(ctx context.Context, keyPrefix str
 
 	return apiKeys, rows.Err()
 }
+
+// Create is an alias for CreateAPIKey to match admin handlers
+func (r *APIKeyRepository) Create(ctx context.Context, apiKey *models.APIKey) error {
+	return r.CreateAPIKey(ctx, apiKey)
+}
+
+// GetByID is an alias for GetAPIKeyByID to match admin handlers
+func (r *APIKeyRepository) GetByID(ctx context.Context, keyID string) (*models.APIKey, error) {
+	return r.GetAPIKeyByID(ctx, keyID)
+}
+
+// Update updates an API key's information
+func (r *APIKeyRepository) Update(ctx context.Context, apiKey *models.APIKey) error {
+	// Marshal scopes to JSONB
+	scopesJSON, err := json.Marshal(apiKey.Scopes)
+	if err != nil {
+		return err
+	}
+
+	query := `
+		UPDATE api_keys
+		SET name = $2, scopes = $3, expires_at = $4
+		WHERE id = $1
+	`
+
+	_, err = r.db.ExecContext(ctx, query,
+		apiKey.ID,
+		apiKey.Name,
+		scopesJSON,
+		apiKey.ExpiresAt,
+	)
+
+	return err
+}
+
+// Delete is an alias for RevokeAPIKey to match admin handlers
+func (r *APIKeyRepository) Delete(ctx context.Context, keyID string) error {
+	return r.RevokeAPIKey(ctx, keyID)
+}
+
+// ListByUser is an alias for ListAPIKeysByUser to match admin handlers
+func (r *APIKeyRepository) ListByUser(ctx context.Context, userID string) ([]*models.APIKey, error) {
+	return r.ListAPIKeysByUser(ctx, userID)
+}
+
+// ListByOrganization is an alias for ListAPIKeysByOrganization to match admin handlers
+func (r *APIKeyRepository) ListByOrganization(ctx context.Context, orgID string) ([]*models.APIKey, error) {
+	return r.ListAPIKeysByOrganization(ctx, orgID)
+}

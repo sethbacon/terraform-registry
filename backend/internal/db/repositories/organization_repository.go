@@ -100,8 +100,8 @@ func (r *OrganizationRepository) CreateOrganization(ctx context.Context, org *mo
 
 // === Organization Membership Operations ===
 
-// AddMember adds a user to an organization with the specified role
-func (r *OrganizationRepository) AddMember(ctx context.Context, orgID, userID, role string) error {
+// AddMemberWithParams adds a user to an organization with the specified role (individual parameters)
+func (r *OrganizationRepository) AddMemberWithParams(ctx context.Context, orgID, userID, role string) error {
 	query := `
 		INSERT INTO organization_members (organization_id, user_id, role, created_at)
 		VALUES ($1, $2, $3, NOW())
@@ -249,4 +249,148 @@ func (r *OrganizationRepository) CheckMembership(ctx context.Context, orgID, use
 	}
 
 	return true, member.Role, nil
+}
+
+// Create is an alias for CreateOrganization to match admin handlers
+func (r *OrganizationRepository) Create(ctx context.Context, org *models.Organization) error {
+	return r.CreateOrganization(ctx, org)
+}
+
+// Update updates an organization
+func (r *OrganizationRepository) Update(ctx context.Context, org *models.Organization) error {
+	query := `
+		UPDATE organizations
+		SET display_name = $2, updated_at = NOW()
+		WHERE id = $1
+	`
+
+	_, err := r.db.ExecContext(ctx, query, org.ID, org.DisplayName)
+	if err != nil {
+		return fmt.Errorf("failed to update organization: %w", err)
+	}
+
+	return nil
+}
+
+// Delete deletes an organization
+func (r *OrganizationRepository) Delete(ctx context.Context, orgID string) error {
+	query := `DELETE FROM organizations WHERE id = $1`
+	_, err := r.db.ExecContext(ctx, query, orgID)
+	if err != nil {
+		return fmt.Errorf("failed to delete organization: %w", err)
+	}
+
+	return nil
+}
+
+// List retrieves a paginated list of organizations
+func (r *OrganizationRepository) List(ctx context.Context, limit, offset int) ([]*models.Organization, error) {
+	query := `
+		SELECT id, name, display_name, created_at, updated_at
+		FROM organizations
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list organizations: %w", err)
+	}
+	defer rows.Close()
+
+	orgs := make([]*models.Organization, 0)
+	for rows.Next() {
+		org := &models.Organization{}
+		err := rows.Scan(
+			&org.ID,
+			&org.Name,
+			&org.DisplayName,
+			&org.CreatedAt,
+			&org.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan organization: %w", err)
+		}
+		orgs = append(orgs, org)
+	}
+
+	return orgs, rows.Err()
+}
+
+// Count returns the total number of organizations
+func (r *OrganizationRepository) Count(ctx context.Context) (int, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM organizations`
+	err := r.db.QueryRowContext(ctx, query).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count organizations: %w", err)
+	}
+
+	return count, nil
+}
+
+// Search searches for organizations by name or display name
+func (r *OrganizationRepository) Search(ctx context.Context, query string, limit, offset int) ([]*models.Organization, error) {
+	searchQuery := `
+		SELECT id, name, display_name, created_at, updated_at
+		FROM organizations
+		WHERE name ILIKE $1 OR display_name ILIKE $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	searchPattern := "%" + query + "%"
+	rows, err := r.db.QueryContext(ctx, searchQuery, searchPattern, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search organizations: %w", err)
+	}
+	defer rows.Close()
+
+	orgs := make([]*models.Organization, 0)
+	for rows.Next() {
+		org := &models.Organization{}
+		err := rows.Scan(
+			&org.ID,
+			&org.Name,
+			&org.DisplayName,
+			&org.CreatedAt,
+			&org.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan organization: %w", err)
+		}
+		orgs = append(orgs, org)
+	}
+
+	return orgs, rows.Err()
+}
+
+// ListUserOrganizations is an alias for GetUserOrganizations
+func (r *OrganizationRepository) ListUserOrganizations(ctx context.Context, userID string) ([]*models.Organization, error) {
+	return r.GetUserOrganizations(ctx, userID)
+}
+
+// AddMember with models.OrganizationMember parameter
+func (r *OrganizationRepository) AddMember(ctx context.Context, member *models.OrganizationMember) error {
+	query := `
+		INSERT INTO organization_members (organization_id, user_id, role, created_at)
+		VALUES ($1, $2, $3, $4)
+	`
+
+	_, err := r.db.ExecContext(ctx, query,
+		member.OrganizationID,
+		member.UserID,
+		member.Role,
+		member.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to add member: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateMember updates a member's information
+func (r *OrganizationRepository) UpdateMember(ctx context.Context, member *models.OrganizationMember) error {
+	return r.UpdateMemberRole(ctx, member.OrganizationID, member.UserID, member.Role)
 }

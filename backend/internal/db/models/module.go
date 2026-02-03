@@ -28,12 +28,3 @@ type ModuleVersion struct {
 	DownloadCount  int64
 	CreatedAt      time.Time
 }
-
-// Organization represents an organization in the registry
-type Organization struct {
-	ID          string
-	Name        string
-	DisplayName string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}

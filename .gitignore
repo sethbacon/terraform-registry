@@ -128,7 +128,7 @@ terraform.tfstate.backup
 
 # Test artifacts
 testdata/output/
-test-providers/*
+test-providers*
 
 # Documentation build
 docs/_build/

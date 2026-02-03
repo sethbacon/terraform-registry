@@ -7,10 +7,14 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/terraform-registry/terraform-registry/internal/api/admin"
 	"github.com/terraform-registry/terraform-registry/internal/api/mirror"
 	"github.com/terraform-registry/terraform-registry/internal/api/modules"
 	"github.com/terraform-registry/terraform-registry/internal/api/providers"
+	"github.com/terraform-registry/terraform-registry/internal/auth"
 	"github.com/terraform-registry/terraform-registry/internal/config"
+	"github.com/terraform-registry/terraform-registry/internal/db/repositories"
+	"github.com/terraform-registry/terraform-registry/internal/middleware"
 	"github.com/terraform-registry/terraform-registry/internal/storage"
 
 	// Import storage backends to register them
@@ -27,6 +31,10 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 		log.Fatalf("Failed to initialize storage backend: %v", err)
 	}
 	log.Printf("Initialized storage backend: %s", cfg.Storage.DefaultBackend)
+
+	// Initialize repositories
+	userRepo := repositories.NewUserRepository(db)
+	apiKeyRepo := repositories.NewAPIKeyRepository(db)
 
 	// Add middleware
 	router.Use(gin.Recovery())
@@ -46,7 +54,9 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	router.GET("/version", versionHandler())
 
 	// Module Registry endpoints (v1) - Terraform Protocol
+	// These are public endpoints that support optional authentication
 	v1Modules := router.Group("/v1/modules")
+	v1Modules.Use(middleware.OptionalAuthMiddleware(cfg, userRepo, apiKeyRepo))
 	{
 		v1Modules.GET("/:namespace/:name/:system/versions", modules.ListVersionsHandler(db, cfg))
 		v1Modules.GET("/:namespace/:name/:system/:version/download", modules.DownloadHandler(db, storageBackend, cfg))
@@ -58,6 +68,7 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	// Provider Registry endpoints (v1)
 	// These are for the standard Provider Registry Protocol
 	v1Providers := router.Group("/v1/providers")
+	v1Providers.Use(middleware.OptionalAuthMiddleware(cfg, userRepo, apiKeyRepo))
 	{
 		v1Providers.GET("/:namespace/:type/versions", providers.ListVersionsHandler(db, cfg))
 		v1Providers.GET("/:namespace/:type/:version/download/:os/:arch", providers.DownloadHandler(db, storageBackend, cfg))
@@ -72,30 +83,95 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 		v1Mirror.GET("/:hostname/:namespace/:type/:versionfile", mirror.PlatformIndexHandler(db, cfg))
 	}
 
+	// Initialize admin handlers
+	authHandlers, err := admin.NewAuthHandlers(cfg, db)
+	if err != nil {
+		log.Fatalf("Failed to initialize auth handlers: %v", err)
+	}
+	apiKeyHandlers := admin.NewAPIKeyHandlers(cfg, db)
+	userHandlers := admin.NewUserHandlers(cfg, db)
+	orgHandlers := admin.NewOrganizationHandlers(cfg, db)
+
 	// Admin API endpoints
 	apiV1 := router.Group("/api/v1")
 	{
-		// Modules admin endpoints - Phase 2
-		apiV1.POST("/modules", modules.UploadHandler(db, storageBackend, cfg))
-		apiV1.GET("/modules/search", modules.SearchHandler(db, cfg))
+		// Public authentication endpoints (no auth required)
+		authGroup := apiV1.Group("/auth")
+		{
+			authGroup.GET("/login", authHandlers.LoginHandler())
+			authGroup.GET("/callback", authHandlers.CallbackHandler())
+		}
 
-		// Providers admin endpoints - Phase 3
-		apiV1.POST("/providers", providers.UploadHandler(db, storageBackend, cfg))
-		apiV1.GET("/providers/search", providers.SearchHandler(db, cfg))
+		// Authenticated-only endpoints
+		authenticatedGroup := apiV1.Group("")
+		authenticatedGroup.Use(middleware.AuthMiddleware(cfg, userRepo, apiKeyRepo))
+		{
+			// Auth endpoints (require auth)
+			authenticatedGroup.POST("/auth/refresh", authHandlers.RefreshHandler())
+			authenticatedGroup.GET("/auth/me", authHandlers.MeHandler())
 
-		// Users admin endpoints
-		apiV1.GET("/users", func(c *gin.Context) {
-			c.JSON(http.StatusNotImplemented, gin.H{
-				"error": "User admin endpoints coming in Phase 4",
-			})
-		})
+			// Modules admin endpoints - require write permissions
+			authenticatedGroup.POST("/modules",
+				middleware.RequireScope(auth.ScopeModulesWrite),
+				modules.UploadHandler(db, storageBackend, cfg))
+			authenticatedGroup.GET("/modules/search",
+				middleware.RequireScope(auth.ScopeModulesRead),
+				modules.SearchHandler(db, cfg))
 
-		// Organizations admin endpoints
-		apiV1.GET("/organizations", func(c *gin.Context) {
-			c.JSON(http.StatusNotImplemented, gin.H{
-				"error": "Organization admin endpoints coming in Phase 4",
-			})
-		})
+			// Providers admin endpoints - require write permissions
+			authenticatedGroup.POST("/providers",
+				middleware.RequireScope(auth.ScopeProvidersWrite),
+				providers.UploadHandler(db, storageBackend, cfg))
+			authenticatedGroup.GET("/providers/search",
+				middleware.RequireScope(auth.ScopeProvidersRead),
+				providers.SearchHandler(db, cfg))
+
+			// API Keys management
+			apiKeysGroup := authenticatedGroup.Group("/apikeys")
+			apiKeysGroup.Use(middleware.RequireScope(auth.ScopeAPIKeysManage))
+			{
+				apiKeysGroup.GET("", apiKeyHandlers.ListAPIKeysHandler())
+				apiKeysGroup.POST("", apiKeyHandlers.CreateAPIKeyHandler())
+				apiKeysGroup.GET("/:id", apiKeyHandlers.GetAPIKeyHandler())
+				apiKeysGroup.PUT("/:id", apiKeyHandlers.UpdateAPIKeyHandler())
+				apiKeysGroup.DELETE("/:id", apiKeyHandlers.DeleteAPIKeyHandler())
+			}
+
+			// Users management (admin only)
+			usersGroup := authenticatedGroup.Group("/users")
+			usersGroup.Use(middleware.RequireScope(auth.ScopeUsersRead))
+			{
+				usersGroup.GET("", userHandlers.ListUsersHandler())
+				usersGroup.GET("/search", userHandlers.SearchUsersHandler())
+				usersGroup.GET("/:id", userHandlers.GetUserHandler())
+			}
+
+			usersWriteGroup := authenticatedGroup.Group("/users")
+			usersWriteGroup.Use(middleware.RequireScope(auth.ScopeUsersWrite))
+			{
+				usersWriteGroup.POST("", userHandlers.CreateUserHandler())
+				usersWriteGroup.PUT("/:id", userHandlers.UpdateUserHandler())
+				usersWriteGroup.DELETE("/:id", userHandlers.DeleteUserHandler())
+			}
+
+			// Organizations management
+			orgsGroup := authenticatedGroup.Group("/organizations")
+			{
+				orgsGroup.GET("", orgHandlers.ListOrganizationsHandler())
+				orgsGroup.GET("/search", orgHandlers.SearchOrganizationsHandler())
+				orgsGroup.GET("/:id", orgHandlers.GetOrganizationHandler())
+
+				// Create/update/delete require admin scope
+				orgsGroup.POST("", middleware.RequireScope(auth.ScopeAdmin), orgHandlers.CreateOrganizationHandler())
+				orgsGroup.PUT("/:id", middleware.RequireScope(auth.ScopeAdmin), orgHandlers.UpdateOrganizationHandler())
+				orgsGroup.DELETE("/:id", middleware.RequireScope(auth.ScopeAdmin), orgHandlers.DeleteOrganizationHandler())
+
+				// Member management
+				orgsGroup.POST("/:id/members", middleware.RequireScope(auth.ScopeAdmin), orgHandlers.AddMemberHandler())
+				orgsGroup.PUT("/:id/members/:user_id", middleware.RequireScope(auth.ScopeAdmin), orgHandlers.UpdateMemberHandler())
+				orgsGroup.DELETE("/:id/members/:user_id", middleware.RequireScope(auth.ScopeAdmin), orgHandlers.RemoveMemberHandler())
+			}
+		}
 	}
 
 	return router
@@ -153,10 +229,10 @@ func serviceDiscoveryHandler(cfg *config.Config) gin.HandlerFunc {
 func versionHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"version": "0.1.0",
+			"version":     "0.1.0",
 			"api_version": "v1",
 			"protocols": gin.H{
-				"modules":  "v1",
+				"modules":   "v1",
 				"providers": "v1",
 				"mirror":    "v1",
 			},

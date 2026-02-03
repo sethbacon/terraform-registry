@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for Terraform Registry Backend
 
 # Stage 1: Build the Go application
-FROM golang:1.22-alpine AS builder
+FROM golang:alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
@@ -17,6 +17,9 @@ RUN go mod download
 
 # Copy source code
 COPY . .
+
+# Tidy dependencies
+RUN go mod tidy
 
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \

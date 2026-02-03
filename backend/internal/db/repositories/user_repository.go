@@ -236,3 +236,103 @@ func (r *UserRepository) GetOrCreateUserFromOIDC(ctx context.Context, oidcSub, e
 
 	return newUser, nil
 }
+
+// Create is an alias for CreateUser to match the admin handlers
+func (r *UserRepository) Create(ctx context.Context, user *models.User) error {
+	return r.CreateUser(ctx, user)
+}
+
+// Update is an alias for UpdateUser to match the admin handlers
+func (r *UserRepository) Update(ctx context.Context, user *models.User) error {
+	return r.UpdateUser(ctx, user)
+}
+
+// Delete is an alias for DeleteUser to match the admin handlers
+func (r *UserRepository) Delete(ctx context.Context, userID string) error {
+	return r.DeleteUser(ctx, userID)
+}
+
+// List retrieves a paginated list of users (simplified version)
+func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]*models.User, error) {
+	query := `
+		SELECT id, email, name, oidc_sub, created_at, updated_at
+		FROM users
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	users := make([]*models.User, 0)
+	for rows.Next() {
+		user := &models.User{}
+		err := rows.Scan(
+			&user.ID,
+			&user.Email,
+			&user.Name,
+			&user.OIDCSub,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+
+	return users, rows.Err()
+}
+
+// Count returns the total number of users
+func (r *UserRepository) Count(ctx context.Context) (int, error) {
+	var total int
+	query := `SELECT COUNT(*) FROM users`
+	err := r.db.QueryRowContext(ctx, query).Scan(&total)
+	return total, err
+}
+
+// Search searches for users by email or name
+func (r *UserRepository) Search(ctx context.Context, query string, limit, offset int) ([]*models.User, error) {
+	searchQuery := `
+		SELECT id, email, name, oidc_sub, created_at, updated_at
+		FROM users
+		WHERE email ILIKE $1 OR name ILIKE $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	searchPattern := "%" + query + "%"
+	rows, err := r.db.QueryContext(ctx, searchQuery, searchPattern, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	users := make([]*models.User, 0)
+	for rows.Next() {
+		user := &models.User{}
+		err := rows.Scan(
+			&user.ID,
+			&user.Email,
+			&user.Name,
+			&user.OIDCSub,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+
+	return users, rows.Err()
+}
+
+// GetOrCreateUserByOIDC is an alias for GetOrCreateUserFromOIDC
+func (r *UserRepository) GetOrCreateUserByOIDC(ctx context.Context, oidcSub, email, name string) (*models.User, error) {
+	return r.GetOrCreateUserFromOIDC(ctx, oidcSub, email, name)
+}
