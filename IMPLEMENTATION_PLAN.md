@@ -167,16 +167,16 @@ terraform-registry/
 - ✅ Search with pagination
 - ✅ SHA256 checksum verification
 - ✅ Direct file serving for local storage
-- ⏳ Azure Blob and S3 storage backends (deferred to later)
+- ⏳ Azure Blob and S3 storage backends (planned for Phase 7)
 
-### Phase 3: Provider Registry & Network Mirror (Sessions 7-10)
+### Phase 3: Provider Registry & Network Mirror (Sessions 4-6) ✅ COMPLETE
 
 **Objectives:**
 
-- Implement Provider Registry Protocol endpoints
-- Implement Provider Network Mirror Protocol
-- GPG signature verification for providers
-- Provider binary storage and serving
+- ✅ Implement Provider Registry Protocol endpoints
+- ✅ Implement Provider Network Mirror Protocol
+- ✅ GPG signature verification framework for providers
+- ✅ Provider binary storage and serving
 
 **Key Endpoints:**
 
@@ -201,66 +201,173 @@ terraform-registry/
 - GPG key management and signature verification
 - Provider platform matrix support
 
-### Phase 4: Authentication & Authorization (Sessions 11-13)
+### Phase 4: Authentication & Authorization (Sessions 7-8) ✅ COMPLETE
 
 **Objectives:**
 
-- API token authentication
-- Azure AD / Entra ID integration
-- Generic OIDC provider support
-- Role-based access control (RBAC)
-- Multi-tenancy support (configurable)
+- ✅ API token authentication
+- ✅ Azure AD / Entra ID integration
+- ✅ Generic OIDC provider support
+- ✅ Role-based access control (RBAC)
+- ✅ Multi-tenancy support (configurable)
 
 **Key Files:**
 
-- `backend/internal/auth/middleware.go` - Auth middleware
-- `backend/internal/auth/oidc/provider.go` - OIDC implementation
-- `backend/internal/auth/azuread/azuread.go` - Azure AD integration
-- `backend/internal/auth/apikey/apikey.go` - API key management
-- `backend/internal/db/models/user.go` - User model
-- `backend/internal/db/models/organization.go` - Organization model (multi-tenancy)
+- ✅ `backend/internal/auth/middleware.go` - Auth middleware
+- ✅ `backend/internal/auth/oidc/provider.go` - OIDC implementation
+- ✅ `backend/internal/auth/azuread/azuread.go` - Azure AD integration
+- ✅ `backend/internal/auth/apikey/apikey.go` - API key management
+- ✅ `backend/internal/middleware/auth.go` - Authentication middleware
+- ✅ `backend/internal/middleware/rbac.go` - RBAC middleware
+- ✅ `backend/internal/api/admin/auth.go` - Authentication endpoints
+- ✅ `backend/internal/api/admin/apikeys.go` - API key management endpoints
+- ✅ `backend/internal/api/admin/users.go` - User management endpoints
+- ✅ `backend/internal/api/admin/organizations.go` - Organization management endpoints
+- ✅ `backend/internal/db/models/user.go` - User model
+- ✅ `backend/internal/db/models/organization.go` - Organization model (multi-tenancy)
+- ✅ `backend/internal/db/models/api_key.go` - API key model
+- ✅ `backend/internal/db/models/organization_member.go` - Organization membership model
 
 **Deliverables:**
 
-- Working authentication system
-- OIDC integration (Azure AD + generic)
-- API key management
-- RBAC implementation
-- Configurable single-tenant vs multi-tenant mode
+- ✅ Working authentication system with JWT and API keys
+- ✅ OIDC integration (Azure AD + generic)
+- ✅ API key management (CRUD operations)
+- ✅ RBAC implementation with scope-based access control
+- ✅ User management endpoints (list, search, create, update, delete)
+- ✅ Organization management endpoints (list, search, create, update, delete)
+- ✅ Organization membership management (add, update, remove members)
+- ✅ Configurable single-tenant vs multi-tenant mode
+- ✅ Authentication middleware integrated into router
+- ✅ Protected admin endpoints with proper authorization
 
-### Phase 5: Frontend SPA (Sessions 14-18)
+### Phase 5: Frontend SPA (Session 9) ✅ COMPLETE
 
 **Objectives:**
 
-- React + TypeScript SPA with Vite
-- Module browsing and search
-- Provider browsing and search
-- Upload/publish interface
-- User and permission management UI
-- Usage analytics dashboard
-- Authentication flows
+- ✅ React + TypeScript SPA with Vite
+- ✅ Module browsing and search
+- ✅ Provider browsing and search
+- ✅ Upload/publish interface
+- ✅ User and permission management UI
+- ✅ Authentication flows
+- ✅ Admin dashboard
 
 **Key Pages/Components:**
 
-- `frontend/src/pages/modules/ModuleList.tsx` - Browse modules
-- `frontend/src/pages/modules/ModuleDetail.tsx` - Module details
-- `frontend/src/pages/providers/ProviderList.tsx` - Browse providers
-- `frontend/src/pages/admin/Dashboard.tsx` - Admin dashboard
-- `frontend/src/pages/admin/Users.tsx` - User management
-- `frontend/src/pages/admin/Upload.tsx` - Upload interface
-- `frontend/src/services/api.ts` - API client
-- `frontend/src/contexts/AuthContext.tsx` - Auth context
+- ✅ `frontend/src/pages/modules/ModuleList.tsx` - Browse modules
+- ✅ `frontend/src/pages/modules/ModuleDetail.tsx` - Module details
+- ✅ `frontend/src/pages/providers/ProviderList.tsx` - Browse providers
+- ✅ `frontend/src/pages/providers/ProviderDetail.tsx` - Provider details
+- ✅ `frontend/src/pages/admin/Dashboard.tsx` - Admin dashboard
+- ✅ `frontend/src/pages/admin/Users.tsx` - User management
+- ✅ `frontend/src/pages/admin/Organizations.tsx` - Organization management
+- ✅ `frontend/src/pages/admin/APIKeys.tsx` - API key management
+- ✅ `frontend/src/pages/admin/Upload.tsx` - Upload interface
+- ✅ `frontend/src/services/api.ts` - API client
+- ✅ `frontend/src/contexts/AuthContext.tsx` - Auth context
 
 **Deliverables:**
 
-- Fully functional React SPA
-- Material-UI component library
-- Responsive design
-- Dark mode support
-- Comprehensive error handling
-- Loading states and optimistic UI updates
+- ✅ Fully functional React SPA
+- ✅ Material-UI component library
+- ✅ Responsive design
+- ✅ Light theme (dark mode ready)
+- ✅ Comprehensive error handling
+- ✅ Loading states and optimistic UI updates
+- ✅ Vite configuration with backend proxy
+- ✅ TypeScript types for all API entities
+- ✅ Protected routes for admin functionality
+- ✅ Authentication context with JWT support
+- ✅ Development server running on port 3000
 
-### Phase 6: Azure DevOps Extension (Sessions 19-21)
+### Phase 5A: VCS Integration for Automated Publishing (Sessions 10-13) ⏳ IN PROGRESS
+
+**Objectives:**
+
+- Connect to VCS providers (GitHub, Azure DevOps, GitLab)
+- OAuth 2.0 authentication flow for VCS access
+- Repository browsing and selection
+- Commit-pinned immutable versioning for security
+- Tag-triggered automated publishing with commit SHA tracking
+- Webhook handlers for push and tag events
+- Manual sync and branch-based publishing
+
+**Security Model:**
+
+- **Immutable versions**: Each version permanently linked to specific commit SHA
+- **Tag-triggered publishing**: Tags used for discovery, commits for immutability
+- **Tag movement detection**: Alert if tags are moved/tampered with
+- **Prevent duplicate versions**: Reject attempts to republish with different commits
+- **Reproducible builds**: Always fetch exact same code for a version
+
+**Backend Implementation:**
+
+**Database Schema:**
+
+- `backend/internal/db/migrations/008_vcs_integration.sql` - VCS tables:
+  - `vcs_providers` - OAuth client configurations per organization
+  - `vcs_oauth_tokens` - User OAuth tokens (encrypted at rest)
+  - `module_vcs_repos` - Links modules to repositories with webhook config
+  - `vcs_webhook_events` - Webhook delivery log for debugging
+  - `version_immutability_violations` - Track tag movement/tampering
+
+**VCS Provider Abstraction:**
+
+- `backend/internal/vcs/provider.go` - VCS provider interface
+- `backend/internal/vcs/github/provider.go` - GitHub implementation
+- `backend/internal/vcs/azuredevops/provider.go` - Azure DevOps implementation
+- `backend/internal/vcs/gitlab/provider.go` - GitLab implementation
+- `backend/internal/vcs/factory.go` - Provider factory pattern
+- `backend/internal/vcs/webhook.go` - Webhook signature validation
+
+**API Endpoints:**
+
+*VCS Provider Management:*
+- `POST /api/v1/vcs-providers` - Create OAuth app configuration
+- `GET /api/v1/vcs-providers` - List configured VCS connections
+- OAuth flow and token management endpoints
+
+*Repository Browsing:*
+- `GET /api/v1/vcs-providers/:id/repositories` - List repositories
+- `GET /api/v1/vcs-providers/:id/repositories/:owner/:repo/tags` - List tags with commit SHAs
+
+*Module-VCS Linking:*
+- `POST /api/v1/modules/:id/vcs` - Link module to VCS repository
+- `POST /api/v1/modules/:id/vcs/sync` - Manual sync
+- `GET /api/v1/modules/:id/vcs/events` - Webhook event history
+
+*Webhook Receiver:*
+- `POST /webhooks/vcs/:module_id/:secret` - Receive webhooks from VCS
+
+**Publishing Logic:**
+
+1. Resolve tag to commit SHA immediately
+2. Verify commit SHA not already published
+3. Clone repository at specific commit
+4. Create immutable tarball with commit SHA in manifest
+5. Store version with commit pinned
+
+**Frontend Implementation:**
+
+- `frontend/src/pages/admin/VCSProvidersPage.tsx` - VCS provider management
+- `frontend/src/components/RepositoryBrowser.tsx` - Repository browser
+- `frontend/src/components/PublishFromVCSWizard.tsx` - Publishing wizard
+- `frontend/src/types/vcs.ts` - VCS TypeScript types
+- Module detail page "VCS" tab with immutability indicators 🔒
+
+**Deliverables:**
+
+- ✅ VCS provider abstraction supporting GitHub, Azure DevOps, GitLab
+- ✅ OAuth 2.0 authentication flow
+- ✅ Commit-pinned immutable versioning preventing supply chain attacks
+- ✅ Tag-triggered automated publishing (tags for UX, commits for security)
+- ✅ Webhook receivers with signature validation
+- ✅ Tag movement detection and alerting
+- ✅ Complete UI for VCS management
+- ✅ Immutability indicators in module version display
+
+### Phase 5B: Azure DevOps Extension (Sessions 14-16)
 
 **Objectives:**
 
@@ -290,17 +397,21 @@ terraform-registry/
 - Published to VS Marketplace
 - Documentation for setup and usage
 
-### Phase 7: Deployment Configurations (Sessions 22-24)
+### Phase 6: Additional Storage Backends & Deployment (Sessions 17-19)
 
 **Objectives:**
 
-- Docker Compose setup
+- Azure Blob Storage backend implementation
+- S3-compatible storage backend implementation
+- Docker Compose setup refinement
 - Kubernetes manifests and Helm chart
 - Azure Container Apps configuration
 - Standalone binary deployment instructions
 
 **Key Files:**
 
+- `backend/internal/storage/azure/azure.go` - Azure Blob Storage implementation
+- `backend/internal/storage/s3/s3.go` - S3-compatible storage implementation
 - `deployments/docker-compose.yml` - Docker Compose
 - `deployments/kubernetes/base/deployment.yaml` - K8s deployment
 - `deployments/kubernetes/base/service.yaml` - K8s service
@@ -311,13 +422,15 @@ terraform-registry/
 
 **Deliverables:**
 
+- Azure Blob Storage backend with SAS token support
+- S3-compatible backend (MinIO, AWS S3, etc.)
 - Production-ready Docker Compose setup
 - Kubernetes deployment with Helm chart
 - Azure Container Apps deployment guide
 - Binary deployment documentation
 - TLS/SSL configuration examples
 
-### Phase 8: Documentation & Testing (Sessions 25-27)
+### Phase 7: Documentation & Testing (Sessions 20-22)
 
 **Objectives:**
 
@@ -353,7 +466,7 @@ terraform-registry/
 - Security scan reports (gosec, npm audit)
 - Performance benchmarks
 
-### Phase 9: Polish & Production Readiness (Sessions 28-30)
+### Phase 8: Polish & Production Readiness (Sessions 23-25)
 
 **Objectives:**
 
@@ -607,16 +720,31 @@ GET/POST/DELETE /api/v1/api-keys
 - **Session 1** ✅: Project foundation, backend core, database schema, Docker setup
 - **Session 2** ✅: Module Registry Protocol - Storage layer, data models, repositories
 - **Session 3** ✅: Module Registry Protocol - API handlers, validation, testing
-- **Session 4-6**: Provider Registry & Network Mirror
-- **Session 7-10**: Authentication & Authorization
-- **Session 11-15**: Frontend SPA
-- **Session 16-18**: Azure DevOps Extension
-- **Session 19-21**: Deployment Configurations
-- **Session 22-24**: Documentation & Testing
-- **Session 25-27**: Production Polish
+- **Session 4** ✅: Provider Registry Protocol - Data models, repositories, validation
+- **Session 5** ✅: Provider Registry Protocol - API handlers, upload/download endpoints
+- **Session 6** ✅: Network Mirror Protocol - Index endpoints, testing with real providers
+- **Session 7** ✅: Authentication & Authorization - Auth infrastructure, OIDC/Azure AD, API keys
+- **Session 8** ✅: User & Organization management - Admin endpoints, RBAC middleware
+- **Session 9** ✅: Frontend SPA - Complete React + TypeScript UI with all pages
+- **Session 10**: Phase 5A - VCS Integration - Database schema, provider abstraction
+- **Session 11**: Phase 5A - VCS Integration - OAuth flows, repository browsing
+- **Session 12**: Phase 5A - VCS Integration - Webhook handlers, immutable publishing
+- **Session 13**: Phase 5A - VCS Integration - Frontend UI, tag movement detection
+- **Session 14**: Phase 5B - Azure DevOps Extension - Begin implementation
+- **Session 15**: Phase 5B - Azure DevOps Extension - Service connection and task implementation
+- **Session 16**: Phase 5B - Azure DevOps Extension - Testing and marketplace publication
+- **Session 17**: Phase 6 - Storage Backends - Azure Blob and S3 implementation
+- **Session 18**: Phase 6 - Deployment Configurations - Docker Compose, Kubernetes, Helm
+- **Session 19**: Phase 6 - Deployment Configurations - Azure Container Apps, binary deployment
+- **Session 20**: Phase 7 - Documentation & Testing - Comprehensive docs
+- **Session 21**: Phase 7 - Documentation & Testing - Unit and integration tests
+- **Session 22**: Phase 7 - Documentation & Testing - E2E tests and security scanning
+- **Session 23**: Phase 8 - Production Polish - Monitoring, observability, performance
+- **Session 24**: Phase 8 - Production Polish - Security hardening, audit logging
+- **Session 25**: Phase 8 - Production Polish - Final testing, deployment checklist
 
 ---
 
-**Last Updated**: Session 3 - 2026-01-30
-**Status**: Phase 2 Complete - Module Registry Protocol fully functional
-**Next Session**: Begin Phase 3 - Provider Registry & Network Mirror Protocol
+**Last Updated**: Session 9 - 2024-01-XX
+**Status**: Phase 5 Complete - Frontend SPA fully implemented and running
+**Next Session**: Begin Phase 5A - VCS Integration for Automated Publishing

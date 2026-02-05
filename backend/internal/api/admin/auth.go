@@ -1,0 +1,355 @@
+package admin
+
+import (
+	"context"
+	"crypto/rand"
+	"database/sql"
+	"encoding/base64"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/terraform-registry/terraform-registry/internal/auth"
+	"github.com/terraform-registry/terraform-registry/internal/auth/azuread"
+	"github.com/terraform-registry/terraform-registry/internal/auth/oidc"
+	"github.com/terraform-registry/terraform-registry/internal/config"
+	"github.com/terraform-registry/terraform-registry/internal/db/repositories"
+)
+
+// AuthHandlers handles authentication-related endpoints
+type AuthHandlers struct {
+	cfg             *config.Config
+	db              *sql.DB
+	userRepo        *repositories.UserRepository
+	orgRepo         *repositories.OrganizationRepository
+	oidcProvider    *oidc.OIDCProvider
+	azureADProvider *azuread.AzureADProvider
+	sessionStore    map[string]*SessionState // In-memory for MVP; use Redis in production
+}
+
+// SessionState represents OAuth state during authentication flow
+type SessionState struct {
+	State        string
+	CreatedAt    time.Time
+	RedirectURL  string
+	ProviderType string // "oidc" or "azuread"
+}
+
+// NewAuthHandlers creates a new AuthHandlers instance
+func NewAuthHandlers(cfg *config.Config, db *sql.DB) (*AuthHandlers, error) {
+	h := &AuthHandlers{
+		cfg:          cfg,
+		db:           db,
+		userRepo:     repositories.NewUserRepository(db),
+		orgRepo:      repositories.NewOrganizationRepository(db),
+		sessionStore: make(map[string]*SessionState),
+	}
+
+	// Initialize OIDC provider if enabled
+	if cfg.Auth.OIDC.Enabled {
+		oidcProv, err := oidc.NewOIDCProvider(&cfg.Auth.OIDC)
+		if err != nil {
+			return nil, err
+		}
+		h.oidcProvider = oidcProv
+	}
+
+	// Initialize Azure AD provider if enabled
+	if cfg.Auth.AzureAD.Enabled {
+		azProv, err := azuread.NewAzureADProvider(&cfg.Auth.AzureAD)
+		if err != nil {
+			return nil, err
+		}
+		h.azureADProvider = azProv
+	}
+
+	return h, nil
+}
+
+// generateState generates a random state string for OAuth
+func generateState() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(b), nil
+}
+
+// LoginHandler initiates the OAuth login flow
+// GET /api/v1/auth/login?provider=oidc|azuread
+func (h *AuthHandlers) LoginHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		provider := c.Query("provider")
+		if provider == "" {
+			provider = "oidc" // Default to OIDC
+		}
+
+		// Generate state for CSRF protection
+		state, err := generateState()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to generate state",
+			})
+			return
+		}
+
+		// Store state in session (in-memory for MVP)
+		h.sessionStore[state] = &SessionState{
+			State:        state,
+			CreatedAt:    time.Now(),
+			ProviderType: provider,
+		}
+
+		// Get authorization URL based on provider
+		var authURL string
+		switch provider {
+		case "oidc":
+			if h.oidcProvider == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": "OIDC provider not configured",
+				})
+				return
+			}
+			authURL = h.oidcProvider.GetAuthURL(state)
+		case "azuread":
+			if h.azureADProvider == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": "Azure AD provider not configured",
+				})
+				return
+			}
+			authURL = h.azureADProvider.GetAuthURL(state)
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Invalid provider. Must be 'oidc' or 'azuread'",
+			})
+			return
+		}
+
+		// Redirect to authorization URL
+		c.Redirect(http.StatusFound, authURL)
+	}
+}
+
+// CallbackHandler handles OAuth callback
+// GET /api/v1/auth/callback?code=...&state=...
+func (h *AuthHandlers) CallbackHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		code := c.Query("code")
+		state := c.Query("state")
+
+		// Validate state
+		sessionState, exists := h.sessionStore[state]
+		if !exists {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Invalid state parameter",
+			})
+			return
+		}
+
+		// Check state expiration (5 minutes)
+		if time.Since(sessionState.CreatedAt) > 5*time.Minute {
+			delete(h.sessionStore, state)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "State expired",
+			})
+			return
+		}
+
+		// Delete state to prevent reuse
+		delete(h.sessionStore, state)
+
+		ctx := context.Background()
+
+		var sub, email, name string
+		var err error
+
+		// Exchange code for tokens based on provider
+		switch sessionState.ProviderType {
+		case "oidc":
+			if h.oidcProvider == nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "OIDC provider not configured",
+				})
+				return
+			}
+
+			// Exchange code for token
+			token, err := h.oidcProvider.ExchangeCode(ctx, code)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Failed to exchange code for token",
+				})
+				return
+			}
+
+			// Extract ID token
+			rawIDToken, ok := token.Extra("id_token").(string)
+			if !ok {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "No id_token in response",
+				})
+				return
+			}
+
+			// Verify ID token
+			idToken, err := h.oidcProvider.VerifyIDToken(ctx, rawIDToken)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Failed to verify ID token",
+				})
+				return
+			}
+
+			// Extract user info
+			sub, email, name, err = h.oidcProvider.ExtractUserInfo(idToken)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Failed to extract user info",
+				})
+				return
+			}
+
+		case "azuread":
+			if h.azureADProvider == nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Azure AD provider not configured",
+				})
+				return
+			}
+
+			// Exchange code for token
+			token, err := h.azureADProvider.ExchangeCode(ctx, code)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Failed to exchange code for token",
+				})
+				return
+			}
+
+			// Extract ID token
+			rawIDToken, ok := token.Extra("id_token").(string)
+			if !ok {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "No id_token in response",
+				})
+				return
+			}
+
+			// Verify ID token
+			idToken, err := h.azureADProvider.VerifyIDToken(ctx, rawIDToken)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Failed to verify ID token",
+				})
+				return
+			}
+
+			// Extract user info
+			sub, email, name, err = h.azureADProvider.ExtractUserInfo(idToken)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Failed to extract user info",
+				})
+				return
+			}
+
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Invalid provider type",
+			})
+			return
+		}
+
+		// Get or create user
+		user, err := h.userRepo.GetOrCreateUserByOIDC(ctx, sub, email, name)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to get or create user",
+			})
+			return
+		}
+
+		// Generate JWT token for user
+		jwtToken, err := auth.GenerateJWT(user.ID, user.Email, 24*time.Hour)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to generate JWT",
+			})
+			return
+		}
+
+		// Return JWT token
+		c.JSON(http.StatusOK, gin.H{
+			"token":      jwtToken,
+			"user":       user,
+			"expires_in": 86400, // 24 hours in seconds
+		})
+	}
+}
+
+// RefreshHandler refreshes an existing JWT token
+// POST /api/v1/auth/refresh
+// Authorization: Bearer <existing_jwt>
+func (h *AuthHandlers) RefreshHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get current user from context (set by auth middleware)
+		userVal, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "User not authenticated",
+			})
+			return
+		}
+
+		userID, ok := userVal.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Invalid user ID format",
+			})
+			return
+		}
+
+		// Get user details
+		user, err := h.userRepo.GetUserByID(c.Request.Context(), userID)
+		if err != nil || user == nil {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "User not found",
+			})
+			return
+		}
+
+		// Generate new JWT token
+		newToken, err := auth.GenerateJWT(user.ID, user.Email, 24*time.Hour)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to generate new token",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"token":      newToken,
+			"expires_in": 86400, // 24 hours in seconds
+		})
+	}
+}
+
+// MeHandler returns the current authenticated user's information
+// GET /api/v1/auth/me
+func (h *AuthHandlers) MeHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get user from context
+		userVal, exists := c.Get("user")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "User not authenticated",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"user": userVal,
+		})
+	}
+}
