@@ -396,9 +396,18 @@ func (r *ProviderRepository) DeletePlatform(ctx context.Context, platformID stri
 // SearchProviders searches for providers matching the query
 func (r *ProviderRepository) SearchProviders(ctx context.Context, orgID, query, namespace string, limit, offset int) ([]*models.Provider, int, error) {
 	// Build WHERE clause
-	whereClause := "WHERE organization_id = $1"
-	args := []interface{}{orgID}
-	argCount := 1
+	var whereClause string
+	var args []interface{}
+	argCount := 0
+
+	// Only filter by organization if orgID is provided (multi-tenant mode)
+	if orgID != "" {
+		argCount++
+		whereClause = fmt.Sprintf("WHERE organization_id = $%d", argCount)
+		args = append(args, orgID)
+	} else {
+		whereClause = "WHERE 1=1" // No org filter in single-tenant mode
+	}
 
 	if query != "" {
 		argCount++

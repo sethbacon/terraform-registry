@@ -14,6 +14,7 @@ import UsersPage from './pages/admin/UsersPage';
 import OrganizationsPage from './pages/admin/OrganizationsPage';
 import APIKeysPage from './pages/admin/APIKeysPage';
 import UploadPage from './pages/admin/UploadPage';
+import SCMProvidersPage from './pages/admin/SCMProvidersPage';
 import ProtectedRoute from './components/ProtectedRoute';
 
 const theme = createTheme({
@@ -60,6 +61,7 @@ function App() {
               <Route path="/admin/organizations" element={<ProtectedRoute><OrganizationsPage /></ProtectedRoute>} />
               <Route path="/admin/apikeys" element={<ProtectedRoute><APIKeysPage /></ProtectedRoute>} />
               <Route path="/admin/upload" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
+              <Route path="/admin/scm-providers" element={<ProtectedRoute><SCMProvidersPage /></ProtectedRoute>} />
               
               {/* Catch all */}
               <Route path="*" element={<Navigate to="/" replace />} />

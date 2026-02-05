@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   Container,
   Typography,
@@ -9,32 +11,34 @@ import {
   Link,
   Chip,
   Divider,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
   CircularProgress,
   Alert,
   Button,
   Stack,
   IconButton,
   Tooltip,
+  Select,
+  MenuItem,
+  FormControl,
 } from '@mui/material';
 import {
   ArrowBack,
   Download,
   ContentCopy,
+  Add,
 } from '@mui/icons-material';
 import api from '../services/api';
 import { Module, ModuleVersion } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 const ModuleDetailPage: React.FC = () => {
-  const { namespace, name, provider } = useParams<{
+  const { namespace, name, system } = useParams<{
     namespace: string;
     name: string;
-    provider: string;
+    system: string;
   }>();
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
 
   const [module, setModule] = useState<Module | null>(null);
   const [versions, setVersions] = useState<ModuleVersion[]>([]);
@@ -45,18 +49,18 @@ const ModuleDetailPage: React.FC = () => {
 
   useEffect(() => {
     loadModuleDetails();
-  }, [namespace, name, provider]);
+  }, [namespace, name, system]);
 
   const loadModuleDetails = async () => {
-    if (!namespace || !name || !provider) return;
+    if (!namespace || !name || !system) return;
 
     try {
       setLoading(true);
       setError(null);
 
       const [moduleData, versionsData] = await Promise.all([
-        api.searchModules({ namespace, name, provider, limit: 1 }),
-        api.getModuleVersions(namespace, name, provider),
+        api.searchModules({ namespace, name, provider: system, limit: 1 }),
+        api.getModuleVersions(namespace, name, system),
       ]);
 
       if (moduleData.modules.length === 0) {
@@ -65,11 +69,14 @@ const ModuleDetailPage: React.FC = () => {
       }
 
       setModule(moduleData.modules[0]);
-      setVersions(versionsData.versions);
+      
+      // Backend returns { modules: [{ versions: [...] }] }
+      const versions = versionsData.modules?.[0]?.versions || [];
+      setVersions(versions);
       
       // Select latest version by default
-      if (versionsData.versions.length > 0) {
-        setSelectedVersion(versionsData.versions[0]);
+      if (versions.length > 0) {
+        setSelectedVersion(versions[0]);
       }
     } catch (err) {
       console.error('Failed to load module details:', err);
@@ -82,17 +89,30 @@ const ModuleDetailPage: React.FC = () => {
   const handleCopySource = () => {
     if (!module || !selectedVersion) return;
     
-    const source = `${namespace}/${name}/${provider}`;
+    const source = `${namespace}/${name}/${system}`;
     navigator.clipboard.writeText(source);
     setCopiedSource(true);
     setTimeout(() => setCopiedSource(false), 2000);
+  };
+
+  const handlePublishNewVersion = () => {
+    navigate('/admin/upload', {
+      state: {
+        tab: 0,
+        moduleData: {
+          namespace,
+          name,
+          provider: system,
+        },
+      },
+    });
   };
 
   const getTerraformExample = () => {
     if (!module || !selectedVersion) return '';
 
     return `module "${name}" {
-  source  = "${window.location.origin}/v1/modules/${namespace}/${name}/${provider}/${selectedVersion.version}"
+  source  = "${window.location.origin}/v1/modules/${namespace}/${name}/${system}/${selectedVersion.version}"
   
   # Add your module variables here
 }`;
@@ -135,25 +155,54 @@ const ModuleDetailPage: React.FC = () => {
         </Link>
         <Typography color="text.primary">{namespace}</Typography>
         <Typography color="text.primary">{name}</Typography>
-        <Typography color="text.primary">{provider}</Typography>
+        <Typography color="text.primary">{system}</Typography>
+        {selectedVersion && (
+          <Typography color="text.primary">v{selectedVersion.version}</Typography>
+        )}
       </Breadcrumbs>
 
       {/* Header */}
       <Box sx={{ mb: 4 }}>
-        <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-          <IconButton onClick={() => navigate('/modules')}>
-            <ArrowBack />
-          </IconButton>
-          <Typography variant="h4" component="h1">
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+          <Stack direction="row" alignItems="center" spacing={2}>
+            <IconButton onClick={() => navigate('/modules')}>
+              <ArrowBack />
+            </IconButton>
+            <Typography variant="h4" component="h1">
             {name}
           </Typography>
+          </Stack>
+          {isAuthenticated && (
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={handlePublishNewVersion}
+            >
+              Publish New Version
+            </Button>
+          )}
         </Stack>
         <Typography variant="body1" color="text.secondary" gutterBottom>
           {module.description || 'No description available'}
         </Typography>
-        <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
-          <Chip label={`${namespace}/${provider}`} />
-          <Chip label={`Latest: ${module.latest_version}`} color="primary" />
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2 }}>
+          <Chip label={`${namespace}/${system}`} />
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <Select
+              value={selectedVersion?.version || ''}
+              onChange={(e) => {
+                const version = versions.find(v => v.version === e.target.value);
+                if (version) setSelectedVersion(version);
+              }}
+              displayEmpty
+            >
+              {versions.map((v) => (
+                <MenuItem key={v.id} value={v.version}>
+                  v{v.version}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <Chip label={`${module.download_count} downloads`} />
         </Stack>
       </Box>
@@ -185,6 +234,55 @@ const ModuleDetailPage: React.FC = () => {
             </Box>
           </Paper>
 
+          {/* README */}
+          {selectedVersion && selectedVersion.readme && (
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                README
+              </Typography>
+              <Divider sx={{ mb: 2 }} />
+              <Box
+                sx={{
+                  '& h1': { fontSize: '2rem', fontWeight: 600, mt: 2, mb: 1 },
+                  '& h2': { fontSize: '1.5rem', fontWeight: 600, mt: 2, mb: 1 },
+                  '& h3': { fontSize: '1.25rem', fontWeight: 600, mt: 2, mb: 1 },
+                  '& p': { mb: 2 },
+                  '& code': {
+                    backgroundColor: '#f5f5f5',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem',
+                  },
+                  '& pre': {
+                    backgroundColor: '#f5f5f5',
+                    padding: 2,
+                    borderRadius: 1,
+                    overflow: 'auto',
+                  },
+                  '& pre code': {
+                    backgroundColor: 'transparent',
+                    padding: 0,
+                  },
+                  '& ul, & ol': { pl: 3, mb: 2 },
+                  '& li': { mb: 1 },
+                  '& table': { borderCollapse: 'collapse', width: '100%', mb: 2 },
+                  '& th, & td': {
+                    border: '1px solid #ddd',
+                    padding: '8px 12px',
+                    textAlign: 'left',
+                  },
+                  '& th': { backgroundColor: '#f5f5f5', fontWeight: 600 },
+                }}
+              >
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedVersion.readme}</ReactMarkdown>
+              </Box>
+            </Paper>
+          )}
+        </Box>
+
+        {/* Sidebar - Module Information and Version Details */}
+        <Box sx={{ width: { xs: '100%', md: 350 } }}>
           {/* Module Information */}
           <Paper sx={{ p: 3, mb: 3 }}>
             <Typography variant="h6" gutterBottom>
@@ -199,16 +297,16 @@ const ModuleDetailPage: React.FC = () => {
                 <strong>Name:</strong> {name}
               </Typography>
               <Typography variant="body2">
-                <strong>Provider:</strong> {provider}
+                <strong>Provider:</strong> {system}
               </Typography>
               <Typography variant="body2">
-                <strong>Latest Version:</strong> {module.latest_version}
+                <strong>Latest Version:</strong> {versions.length > 0 ? versions[0].version : 'N/A'}
               </Typography>
               <Typography variant="body2">
-                <strong>Total Downloads:</strong> {module.download_count}
+                <strong>Total Downloads:</strong> {module.download_count ?? 0}
               </Typography>
               <Typography variant="body2">
-                <strong>Organization:</strong> {module.organization_name}
+                <strong>Organization:</strong> {module.organization_name || 'N/A'}
               </Typography>
             </Box>
           </Paper>
@@ -222,10 +320,10 @@ const ModuleDetailPage: React.FC = () => {
               <Divider sx={{ mb: 2 }} />
               <Typography variant="body2" sx={{ mb: 1 }}>
                 <strong>Published:</strong>{' '}
-                {new Date(selectedVersion.published_at).toLocaleDateString()}
+                {new Date(selectedVersion.published_at).toISOString().split('T')[0]}
               </Typography>
               <Typography variant="body2" sx={{ mb: 1 }}>
-                <strong>Downloads:</strong> {selectedVersion.download_count}
+                <strong>Downloads:</strong> {selectedVersion.download_count ?? 0}
               </Typography>
               {selectedVersion.source_url && (
                 <Typography variant="body2">
@@ -237,30 +335,6 @@ const ModuleDetailPage: React.FC = () => {
               )}
             </Paper>
           )}
-        </Box>
-
-        {/* Sidebar - Versions List */}
-        <Box sx={{ width: { xs: '100%', md: 300 } }}>
-          <Paper>
-            <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-              <Typography variant="h6">Versions</Typography>
-            </Box>
-            <List sx={{ maxHeight: 600, overflow: 'auto' }}>
-              {versions.map((version) => (
-                <ListItem key={version.id} disablePadding>
-                  <ListItemButton
-                    selected={selectedVersion?.id === version.id}
-                    onClick={() => setSelectedVersion(version)}
-                  >
-                    <ListItemText
-                      primary={version.version}
-                      secondary={new Date(version.published_at).toLocaleDateString()}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
-          </Paper>
         </Box>
       </Box>
     </Container>

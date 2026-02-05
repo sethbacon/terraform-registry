@@ -4,17 +4,22 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jmoiron/sqlx"
 	"github.com/terraform-registry/terraform-registry/internal/api/admin"
 	"github.com/terraform-registry/terraform-registry/internal/api/mirror"
 	"github.com/terraform-registry/terraform-registry/internal/api/modules"
 	"github.com/terraform-registry/terraform-registry/internal/api/providers"
+	"github.com/terraform-registry/terraform-registry/internal/api/webhooks"
 	"github.com/terraform-registry/terraform-registry/internal/auth"
 	"github.com/terraform-registry/terraform-registry/internal/config"
+	"github.com/terraform-registry/terraform-registry/internal/crypto"
 	"github.com/terraform-registry/terraform-registry/internal/db/repositories"
 	"github.com/terraform-registry/terraform-registry/internal/middleware"
+	"github.com/terraform-registry/terraform-registry/internal/services"
 	"github.com/terraform-registry/terraform-registry/internal/storage"
 
 	// Import storage backends to register them
@@ -35,6 +40,23 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	// Initialize repositories
 	userRepo := repositories.NewUserRepository(db)
 	apiKeyRepo := repositories.NewAPIKeyRepository(db)
+	moduleRepo := repositories.NewModuleRepository(db)
+
+	// Wrap *sql.DB with sqlx for SCM repository
+	sqlxDB := sqlx.NewDb(db, "postgres")
+	scmRepo := repositories.NewSCMRepository(sqlxDB)
+
+	// Get encryption key from environment for OAuth token encryption
+	encryptionKey := os.Getenv("ENCRYPTION_KEY")
+	if encryptionKey == "" {
+		log.Fatal("ENCRYPTION_KEY environment variable must be set for SCM integration")
+	}
+
+	// Initialize token cipher for encrypting OAuth tokens
+	tokenCipher, err := crypto.NewTokenCipher([]byte(encryptionKey))
+	if err != nil {
+		log.Fatalf("Failed to initialize token cipher: %v", err)
+	}
 
 	// Add middleware
 	router.Use(gin.Recovery())
@@ -84,13 +106,23 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	}
 
 	// Initialize admin handlers
-	authHandlers, err := admin.NewAuthHandlers(cfg, db)
+	var authHandlers *admin.AuthHandlers
+	authHandlers, err = admin.NewAuthHandlers(cfg, db)
 	if err != nil {
 		log.Fatalf("Failed to initialize auth handlers: %v", err)
 	}
 	apiKeyHandlers := admin.NewAPIKeyHandlers(cfg, db)
 	userHandlers := admin.NewUserHandlers(cfg, db)
 	orgHandlers := admin.NewOrganizationHandlers(cfg, db)
+
+	// Initialize SCM handlers with the already-created repositories and token cipher
+	scmProviderHandlers := admin.NewSCMProviderHandlers(cfg, scmRepo, tokenCipher)
+	scmOAuthHandlers := admin.NewSCMOAuthHandlers(cfg, scmRepo, userRepo, tokenCipher)
+	scmLinkingHandler := modules.NewSCMLinkingHandler(scmRepo, moduleRepo, tokenCipher, cfg.Server.BaseURL)
+
+	// Initialize SCM publisher service
+	scmPublisher := services.NewSCMPublisher(scmRepo, moduleRepo, storageBackend, tokenCipher)
+	scmWebhookHandler := webhooks.NewSCMWebhookHandler(scmRepo, scmPublisher)
 
 	// Admin API endpoints
 	apiV1 := router.Group("/api/v1")
@@ -171,8 +203,42 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 				orgsGroup.PUT("/:id/members/:user_id", middleware.RequireScope(auth.ScopeAdmin), orgHandlers.UpdateMemberHandler())
 				orgsGroup.DELETE("/:id/members/:user_id", middleware.RequireScope(auth.ScopeAdmin), orgHandlers.RemoveMemberHandler())
 			}
+
+			// SCM Provider management
+			scmProvidersGroup := authenticatedGroup.Group("/scm-providers")
+			scmProvidersGroup.Use(middleware.RequireScope(auth.ScopeAdmin))
+			{
+				scmProvidersGroup.GET("", scmProviderHandlers.ListProviders)
+				scmProvidersGroup.POST("", scmProviderHandlers.CreateProvider)
+				scmProvidersGroup.GET("/:id", scmProviderHandlers.GetProvider)
+				scmProvidersGroup.PUT("/:id", scmProviderHandlers.UpdateProvider)
+				scmProvidersGroup.DELETE("/:id", scmProviderHandlers.DeleteProvider)
+
+				// OAuth flow endpoints (user-level, not admin-only)
+				scmProvidersGroup.GET("/:id/oauth/authorize", scmOAuthHandlers.InitiateOAuth)
+				scmProvidersGroup.DELETE("/:id/oauth/token", scmOAuthHandlers.RevokeOAuth)
+				scmProvidersGroup.POST("/:id/oauth/refresh", scmOAuthHandlers.RefreshToken)
+			}
+
+			// SCM OAuth callback (public endpoint, no auth required)
+			apiV1.GET("/scm-providers/:id/oauth/callback", scmOAuthHandlers.HandleOAuthCallback)
+
+			// Module SCM linking endpoints
+			moduleSCMGroup := authenticatedGroup.Group("/modules/:id/scm")
+			moduleSCMGroup.Use(middleware.RequireScope(auth.ScopeModulesWrite))
+			{
+				moduleSCMGroup.POST("", scmLinkingHandler.LinkModuleToSCM)
+				moduleSCMGroup.GET("", scmLinkingHandler.GetModuleSCMInfo)
+				moduleSCMGroup.PUT("", scmLinkingHandler.UpdateSCMLink)
+				moduleSCMGroup.DELETE("", scmLinkingHandler.UnlinkModuleFromSCM)
+				moduleSCMGroup.POST("/sync", scmLinkingHandler.TriggerManualSync)
+				moduleSCMGroup.GET("/events", scmLinkingHandler.GetWebhookEvents)
+			}
 		}
 	}
+
+	// Webhook endpoints (public, authentication via signature validation)
+	router.POST("/webhooks/scm/:module_source_repo_id/:secret", scmWebhookHandler.HandleWebhook)
 
 	return router
 }

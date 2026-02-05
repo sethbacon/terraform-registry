@@ -1,0 +1,170 @@
+package webhooks
+
+import (
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/terraform-registry/terraform-registry/internal/db/repositories"
+	"github.com/terraform-registry/terraform-registry/internal/scm"
+	"github.com/terraform-registry/terraform-registry/internal/services"
+)
+
+// SCMWebhookHandler handles incoming SCM webhooks
+type SCMWebhookHandler struct {
+	scmRepo    *repositories.SCMRepository
+	publisher  *services.SCMPublisher
+	connectors map[scm.ProviderType]scm.Connector
+}
+
+// NewSCMWebhookHandler creates a new webhook handler
+func NewSCMWebhookHandler(scmRepo *repositories.SCMRepository, publisher *services.SCMPublisher) *SCMWebhookHandler {
+	return &SCMWebhookHandler{
+		scmRepo:    scmRepo,
+		publisher:  publisher,
+		connectors: make(map[scm.ProviderType]scm.Connector),
+	}
+}
+
+// HandleWebhook processes incoming webhooks from SCM providers
+// POST /webhooks/scm/:module_source_repo_id/:secret
+func (h *SCMWebhookHandler) HandleWebhook(c *gin.Context) {
+	repoIDStr := c.Param("module_source_repo_id")
+	_ = c.Param("secret") // TODO: Verify webhook secret
+
+	repoID, err := uuid.Parse(repoIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid repository ID"})
+		return
+	}
+
+	// Read the webhook payload
+	payloadBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read payload"})
+		return
+	}
+
+	// Get the module source repository link
+	moduleSourceRepo, err := h.scmRepo.GetModuleSourceRepo(c.Request.Context(), repoID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get repository link"})
+		return
+	}
+	if moduleSourceRepo == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "repository link not found"})
+		return
+	}
+
+	// Get the SCM provider
+	provider, err := h.scmRepo.GetProvider(c.Request.Context(), moduleSourceRepo.SCMProviderID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get SCM provider"})
+		return
+	}
+	if provider == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "SCM provider not found"})
+		return
+	}
+
+	// Build connector for this provider
+	connector, err := scm.BuildConnector(&scm.ConnectorSettings{
+		Kind:         provider.ProviderType,
+		ClientID:     provider.ClientID,
+		ClientSecret: provider.ClientSecretEncrypted, // Will need decryption
+		CallbackURL:  "",
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create connector"})
+		return
+	}
+
+	// Extract headers
+	headers := make(map[string]string)
+	for key, values := range c.Request.Header {
+		if len(values) > 0 {
+			headers[key] = values[0]
+		}
+	}
+
+	// Verify webhook signature
+	signatureHeader := h.getSignatureHeader(c.Request, provider.ProviderType)
+	if !connector.VerifyDeliverySignature(payloadBytes, signatureHeader, provider.WebhookSecret) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid webhook signature"})
+		return
+	}
+
+	// Parse the webhook payload
+	hook, err := connector.ParseDelivery(payloadBytes, headers)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse webhook"})
+		return
+	}
+
+	// Log the webhook event
+	logID := uuid.New()
+	validSig := true
+	webhookLog := &scm.SCMWebhookLogRecord{
+		ID:              logID,
+		ModuleSCMRepoID: repoID,
+		EventID:         &hook.ID,
+		EventType:       hook.Type,
+		Ref:             &hook.Ref,
+		CommitSHA:       &hook.CommitSHA,
+		TagName:         &hook.TagName,
+		Payload:         hook.Payload,
+		Headers:         convertHeaders(headers),
+		Signature:       &signatureHeader,
+		SignatureValid:  &validSig,
+		Processed:       false,
+		CreatedAt:       time.Now(),
+	}
+
+	if err := h.scmRepo.CreateWebhookLog(c.Request.Context(), webhookLog); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to log webhook"})
+		return
+	}
+
+	// Process the webhook asynchronously if it's a tag push
+	if hook.IsTagEvent() && moduleSourceRepo.AutoPublish {
+		go h.publisher.ProcessTagPush(c.Request.Context(), logID, moduleSourceRepo, hook, connector)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "webhook received", "log_id": logID})
+}
+
+func (h *SCMWebhookHandler) getSignatureHeader(req *http.Request, providerType scm.ProviderType) string {
+	switch providerType {
+	case scm.ProviderGitHub:
+		return req.Header.Get("X-Hub-Signature-256")
+	case scm.ProviderGitLab:
+		return req.Header.Get("X-Gitlab-Token")
+	case scm.ProviderAzureDevOps:
+		return req.Header.Get("X-Vss-Signature")
+	default:
+		return ""
+	}
+}
+
+func formatHeaders(headers map[string]string) string {
+	// Convert headers map to JSON string for storage
+	result := ""
+	for key, value := range headers {
+		if result != "" {
+			result += ", "
+		}
+		result += fmt.Sprintf("%s: %s", key, value)
+	}
+	return result
+}
+
+func convertHeaders(headers map[string]string) map[string]interface{} {
+	result := make(map[string]interface{})
+	for key, value := range headers {
+		result[key] = value
+	}
+	return result
+}

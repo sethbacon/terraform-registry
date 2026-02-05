@@ -1,416 +1,377 @@
-# Terraform Registry
+# Enterprise Terraform Registry
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go)](https://go.dev/)
-[![React](https://img.shields.io/badge/React-18+-61DAFB?logo=react)](https://reactjs.org/)
+A fully-featured, enterprise-grade Terraform registry implementing all three HashiCorp protocols with modern web UI and multi-tenancy support.
 
-An enterprise-grade, self-hosted Terraform registry implementing all HashiCorp protocols for modules, providers, and network mirroring.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)](https://go.dev/)
+[![React](https://img.shields.io/badge/React-18+-61DAFB?logo=react)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5+-3178C6?logo=typescript)](https://www.typescriptlang.org/)
 
-## Features
+## 🚀 Features
 
-### Core Protocols
+### ✅ Fully Implemented
 
-- **✅ Module Registry Protocol** - Publish and discover Terraform modules (Phase 2 - Complete)
-- **✅ Provider Registry Protocol** - Distribute custom Terraform providers (Phase 3 - Complete)
-- **✅ Provider Network Mirror Protocol** - Mirror providers for air-gapped environments (Phase 3 - Complete)
+#### Terraform Protocol Support
 
-### Backend
+- **Module Registry Protocol** - Complete implementation for hosting and discovering Terraform modules
+- **Provider Registry Protocol** - Full provider hosting with platform-specific binaries
+- **Provider Network Mirror Protocol** - Efficient provider mirroring and caching
 
-- **✅ Go Backend** with Gin framework for high performance
-- **✅ PostgreSQL** database for robust metadata storage
-- **Storage backends**:
-  - **✅ Local filesystem** (Phase 2 - Complete)
-  - Azure Blob Storage (Planned)
-  - S3-compatible storage (AWS S3, MinIO, etc.) (Planned)
-- **✅ GPG signature verification** framework for provider security (Phase 3 - Complete)
+#### Authentication & Authorization
 
-### Authentication & Authorization
+- **API Key Authentication** - Secure token-based access with scoped permissions
+- **OIDC Integration** - Generic OIDC provider support for SSO
+- **Azure AD / Entra ID** - Native Azure Active Directory integration
+- **Role-Based Access Control (RBAC)** - Fine-grained permissions with organization roles
 
-- **API Key authentication** for CLI and automation
-- **Azure AD / Entra ID** integration
-- **Generic OIDC** provider support (Okta, Auth0, Google, etc.)
-- **Role-based access control (RBAC)**
-- **Multi-tenancy** support (configurable)
+#### Multi-Tenancy
 
-### Frontend
+- **Organization Management** - Isolated namespaces for teams and projects
+- **User Management** - Comprehensive user administration
+- **Organization Membership** - Role-based team collaboration (owner, admin, member, viewer)
+- **Configurable Modes** - Single-tenant or multi-tenant deployment
 
-- **React + TypeScript SPA** with Material-UI
-- Module and provider browsing with search
-- Web-based upload interface
-- User and permission management
-- Usage analytics dashboard
-- Dark mode support
+#### Storage Backends
 
-### DevOps Integration
+- **Local Filesystem** - Direct file serving for development and simple deployments
+- **Pluggable Architecture** - Extensible storage interface for cloud providers
+- ⏳ Azure Blob Storage (planned - Phase 6)
+- ⏳ S3-Compatible Storage (planned - Phase 6)
 
-- **Azure DevOps extension** with OIDC authentication
+#### Modern Web Interface
+
+- **React 18+ SPA** - Fast, responsive single-page application
+- **TypeScript** - Full type safety across the frontend
+- **Material-UI** - Professional, accessible component library
+- **Module Browser** - Search, filter, and explore modules with pagination
+- **Provider Browser** - Discover and manage provider versions
+- **Admin Dashboard** - System statistics and management tools
+- **Upload Interface** - Easy module and provider publishing
+- **Responsive Design** - Works on desktop, tablet, and mobile
+
+#### Security
+
+- **GPG Verification** - Provider binary signature validation
+- **SHA256 Checksums** - File integrity verification
+- **Path Traversal Protection** - Secure archive extraction
+- **Input Validation** - Semantic versioning and format validation
+- **Audit Logging** - Comprehensive activity tracking
+- **Rate Limiting** - API protection (coming soon)
+
+### ⏳ In Progress
+
+#### SCM Integration (Phase 5A - Sessions 10-13)
+
+- **Git Provider Support** - GitHub, Azure DevOps, GitLab integration
+- **OAuth 2.0 Flows** - Secure repository access
+- **Automated Publishing** - Tag-triggered module releases
+- **Commit-Pinned Versions** - Immutable version security
+- **Webhook Handlers** - Real-time update processing
+- **Tag Movement Detection** - Supply chain attack prevention
+
+### 📋 Planned
+
+#### Azure DevOps Extension (Phase 5B)
+
 - Custom pipeline task for publishing
-- Service connection integration
+- OIDC authentication with workload identity
+- Visual Studio Marketplace distribution
 
-### Deployment
+#### Additional Storage & Deployment (Phase 6)
 
-- Docker Compose for single-server deployments
-- Kubernetes with Helm charts
-- Azure Container Apps
-- Standalone binary
+- Azure Blob Storage backend
+- S3-compatible storage backend
+- Kubernetes Helm charts
+- Azure Container Apps configuration
 
-### Enterprise Features
+#### Documentation & Testing (Phase 7)
+
+- Comprehensive API documentation
+- 80%+ test coverage
+- End-to-end test suite
+- Performance benchmarks
+
+#### Production Polish (Phase 8)
 
 - OpenTelemetry instrumentation
 - Prometheus metrics
-- Structured logging
-- Rate limiting
-- Audit logging
-- Health checks
+- Grafana dashboards
+- Performance optimization
 
-## Quick Start
+## 🏗️ Architecture
+
+```txt
+┌─────────────────────────────────────────────────────────────┐
+│                     React TypeScript SPA                     │
+│  Module Browser │ Provider Browser │ Admin Dashboard │ Auth │
+└────────────────────────────┬────────────────────────────────┘
+                             │
+                             │ REST API
+                             │
+┌────────────────────────────▼────────────────────────────────┐
+│                      Go Backend (Gin)                        │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │ Modules  │  │Providers │  │  Mirror  │  │  Admin   │   │
+│  │   API    │  │   API    │  │   API    │  │   API    │   │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │         Authentication & Authorization               │  │
+│  │    API Keys │ OIDC │ Azure AD │ RBAC Middleware     │  │
+│  └──────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │              Storage Abstraction Layer               │  │
+│  │    Local FS │ Azure Blob (planned) │ S3 (planned)   │  │
+│  └──────────────────────────────────────────────────────┘  │
+└────────────────────────────┬────────────────────────────────┘
+                             │
+                             │
+                    ┌────────▼────────┐
+                    │   PostgreSQL    │
+                    │   Database      │
+                    └─────────────────┘
+```
+
+## 📦 Installation
 
 ### Prerequisites
 
-- Go 1.22 or later
-- PostgreSQL 14 or later
-- Node.js 18 or later (for frontend development)
-- Docker and Docker Compose (for containerized deployment)
+- Go 1.21 or later
+- Node.js 18+ and npm
+- PostgreSQL 14+
+- Docker & Docker Compose (for containerized deployment)
 
-### Development Setup
-
-1. **Clone the repository**
-
-   ```bash
-   git clone https://github.com/your-org/terraform-registry.git
-   cd terraform-registry
-   ```
-
-2. **Set up PostgreSQL**
-
-   ```bash
-   # Using Docker
-   docker run -d \
-     --name postgres \
-     -e POSTGRES_DB=terraform_registry \
-     -e POSTGRES_USER=registry \
-     -e POSTGRES_PASSWORD=registry \
-     -p 5432:5432 \
-     postgres:16
-   ```
-
-3. **Configure the application**
-
-   ```bash
-   cp config.example.yaml config.yaml
-   # Edit config.yaml with your settings
-   ```
-
-4. **Run database migrations**
-
-   ```bash
-   cd backend
-   go run cmd/server/main.go migrate up
-   ```
-
-5. **Start the backend server**
-
-   ```bash
-   cd backend
-   go run cmd/server/main.go serve
-   ```
-
-6. **Start the frontend (development)**
-
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
-
-The application will be available at:
-
-- Backend API: <http://localhost:8080>
-- Frontend UI: <http://localhost:5173>
-
-### Docker Compose Deployment
+### Quick Start with Docker Compose
 
 ```bash
-cd deployments
+# Clone the repository
+git clone https://github.com/yourusername/terraform-registry.git
+cd terraform-registry
+
+# Start all services
 docker-compose up -d
+
+# Backend: http://localhost:8080
+# Frontend: http://localhost:3000
+# PostgreSQL: localhost:5432
 ```
 
-Access the registry at <http://localhost:8080>
+### Manual Setup
 
-## Usage with Terraform
-
-### Publishing Modules (✅ Available Now)
-
-Upload a module to the registry:
+#### Backend
 
 ```bash
-# Package your module
-tar -czf module.tar.gz -C /path/to/module .
+cd backend
 
-# Upload to registry
-curl -X POST http://localhost:8080/api/v1/modules \
-  -F "namespace=myorg" \
-  -F "name=vpc" \
-  -F "system=aws" \
-  -F "version=1.0.0" \
-  -F "description=My VPC module" \
-  -F "file=@module.tar.gz"
+# Install dependencies
+go mod download
+
+# Set up configuration
+cp config.example.yaml config.yaml
+# Edit config.yaml with your settings
+
+# Run database migrations
+go run cmd/server/main.go migrate
+
+# Start the server
+go run cmd/server/main.go serve
 ```
 
-### Using Modules (✅ Available Now)
+#### Frontend
 
-Configure Terraform to use modules from your registry:
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+
+```bash
+# Database
+export DB_HOST=localhost
+export DB_PORT=5432
+export DB_USER=terraform_registry
+export DB_PASSWORD=your_password
+export DB_NAME=terraform_registry
+
+# Server
+export SERVER_PORT=8080
+export SERVER_HOST=0.0.0.0
+
+# Storage
+export STORAGE_BACKEND=local
+export STORAGE_LOCAL_PATH=/var/lib/terraform-registry
+
+# Authentication
+export JWT_SECRET=your_jwt_secret_here
+export OIDC_ISSUER_URL=https://your-idp.com
+export OIDC_CLIENT_ID=your_client_id
+export OIDC_CLIENT_SECRET=your_client_secret
+
+# Azure AD (optional)
+export AZURE_AD_TENANT_ID=your_tenant_id
+export AZURE_AD_CLIENT_ID=your_client_id
+export AZURE_AD_CLIENT_SECRET=your_client_secret
+```
+
+### Configuration File
+
+See `backend/config.example.yaml` for a complete configuration reference.
+
+## 📚 Usage
+
+### Using with Terraform
 
 ```hcl
-module "vpc" {
-  source  = "localhost:8080/myorg/vpc/aws"
-  version = "1.0.0"
-
-  vpc_name = "production"
-  vpc_cidr = "10.0.0.0/16"
-}
-```
-
-### Searching Modules (✅ Available Now)
-
-```bash
-# Search for modules
-curl "http://localhost:8080/api/v1/modules/search?q=vpc"
-
-# List versions
-curl "http://localhost:8080/v1/modules/myorg/vpc/aws/versions"
-```
-
-### Providers (✅ Available Now)
-
-Upload a provider to the registry:
-
-```bash
-# Upload provider binary for a specific platform
-curl -X POST http://localhost:8080/api/v1/providers \
-  -F "namespace=myorg" \
-  -F "type=custom" \
-  -F "version=1.0.0" \
-  -F "os=linux" \
-  -F "arch=amd64" \
-  -F "protocols=[\"5.0\",\"6.0\"]" \
-  -F "file=@terraform-provider-custom_1.0.0_linux_amd64.zip"
-```
-
-Configure Terraform to use a provider from your registry:
-
-```hcl
+# Configure the registry
 terraform {
   required_providers {
-    custom = {
-      source  = "localhost:8080/myorg/custom"
-      version = "1.0.0"
+    mycloud = {
+      source  = "registry.example.com/myorg/mycloud"
+      version = "~> 1.0"
     }
   }
 }
 
-provider "custom" {
-  # Provider configuration
+# Use modules from the registry
+module "vpc" {
+  source  = "registry.example.com/myorg/vpc/aws"
+  version = "2.1.0"
+  
+  cidr_block = "10.0.0.0/16"
 }
 ```
 
-List available versions:
+### Publishing Modules
+
+#### Via UI
+
+1. Navigate to Admin → Upload
+2. Select module archive (tar.gz or zip)
+3. Fill in metadata (namespace, name, system, version)
+4. Click Upload
+
+#### Via API
 
 ```bash
-curl "http://localhost:8080/v1/providers/myorg/custom/versions"
+curl -X POST https://registry.example.com/api/v1/modules \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -F "file=@module.tar.gz" \
+  -F "namespace=myorg" \
+  -F "name=vpc" \
+  -F "system=aws" \
+  -F "version=1.0.0"
 ```
 
-### Network Mirror Protocol (✅ Available Now)
-
-Configure Terraform CLI to use your registry as a provider mirror for air-gapped environments:
-
-```hcl
-# In ~/.terraformrc or terraform.rc
-provider_installation {
-  network_mirror {
-    url = "http://localhost:8080/terraform/providers/"
-  }
-}
-```
-
-Test the Network Mirror endpoints:
+### Publishing Providers
 
 ```bash
-# Get version index
-curl "http://localhost:8080/terraform/providers/registry.terraform.io/hashicorp/azurerm/index.json"
-
-# Get platform index for a specific version
-curl "http://localhost:8080/terraform/providers/registry.terraform.io/hashicorp/azurerm/3.85.0.json"
+curl -X POST https://registry.example.com/api/v1/providers \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -F "file=@terraform-provider-mycloud_1.0.0_linux_amd64.zip" \
+  -F "namespace=myorg" \
+  -F "type=mycloud" \
+  -F "version=1.0.0" \
+  -F "os=linux" \
+  -F "arch=amd64" \
+  -F "gpg_public_key=@public_key.asc"
 ```
 
-## Documentation
-
-Comprehensive documentation is available in the [docs](docs/) directory:
-
-- [Architecture Overview](docs/architecture.md)
-- [API Reference](docs/api-reference.md)
-- [Deployment Guide](docs/deployment.md)
-- [Configuration Reference](docs/configuration.md)
-- [Development Guide](docs/development.md)
-- [Azure DevOps Integration](docs/azure-devops-integration.md)
-- [Terraform Usage Guide](docs/terraform-usage.md)
-- [Troubleshooting](docs/troubleshooting.md)
-
-## Configuration
-
-The application is configured via `config.yaml` or environment variables. Key configuration areas:
-
-- **Server settings** - Host, port, base URL, timeouts
-- **Database** - PostgreSQL connection settings
-- **Storage backends** - Azure Blob, S3, or local filesystem
-- **Authentication** - API keys, OIDC, Azure AD
-- **Multi-tenancy** - Enable/disable organization isolation
-- **Security** - CORS, rate limiting, TLS
-- **Telemetry** - Metrics, tracing, logging
-
-See [Configuration Reference](docs/configuration.md) for complete details.
-
-## API Endpoints
-
-### Service Discovery
-
-```cmd
-GET /.well-known/terraform.json
-```
-
-### Module Registry
-
-```cmd
-GET  /v1/modules/:namespace/:name/:system/versions
-GET  /v1/modules/:namespace/:name/:system/:version/download
-POST /api/v1/modules (upload)
-```
-
-### Provider Registry
-
-```cmd
-GET  /v1/providers/:namespace/:type/versions
-GET  /v1/providers/:namespace/:type/:version/download/:os/:arch
-POST /api/v1/providers (upload)
-```
-
-### Network Mirror
-
-```cmd
-GET /v1/providers/:hostname/:namespace/:type/index.json
-GET /v1/providers/:hostname/:namespace/:type/:version.json
-```
-
-See [API Reference](docs/api-reference.md) for complete API documentation.
-
-## Development
-
-### Project Structure
-
-```cmd
-terraform-registry/
-├── backend/          # Go backend application
-├── frontend/         # React TypeScript SPA
-├── azure-devops-extension/  # Azure DevOps extension
-├── deployments/      # Deployment configurations
-├── docs/             # Documentation
-└── scripts/          # Build and utility scripts
-```
+## 🧪 Development
 
 ### Running Tests
 
-**Backend:**
-
 ```bash
+# Backend tests
 cd backend
 go test ./...
-```
 
-**Frontend:**
-
-```bash
+# Frontend tests
 cd frontend
 npm test
 ```
 
 ### Building
 
-**Backend:**
-
 ```bash
+# Build backend binary
 cd backend
 go build -o terraform-registry cmd/server/main.go
-```
 
-**Frontend:**
-
-```bash
+# Build frontend for production
 cd frontend
 npm run build
 ```
 
-**Docker Image:**
+## 📖 Documentation
 
-```bash
-docker build -t terraform-registry:latest .
-```
+- [Implementation Plan](IMPLEMENTATION_PLAN.md) - Detailed project roadmap
+- [Changelog](CHANGELOG.md) - Version history and changes
+- [API Reference](docs/api-reference.md) - Complete API documentation (coming soon)
+- [Architecture](docs/architecture.md) - System design details (coming soon)
+- [Deployment Guide](docs/deployment.md) - Production deployment (coming soon)
 
-## Contributing
+## 🗺️ Roadmap
 
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+### Current: Phase 5A - SCM Integration (Sessions 10-13)
 
-## Security
+- OAuth integration with GitHub, Azure DevOps, GitLab
+- Repository browsing and selection
+- Automated tag-based publishing
+- Commit-pinned immutable versions
 
-Security is a top priority. We implement:
+### Next: Phase 5B - Azure DevOps Extension (Sessions 14-16)
 
-- GPG signature verification for all provider binaries
-- API key hashing with bcrypt
-- HTTPS/TLS enforcement in production
-- Rate limiting to prevent abuse
-- Input validation and SQL injection prevention
-- Audit logging for administrative actions
-- CORS policy enforcement
+- Custom pipeline task
+- OIDC authentication
+- Marketplace publication
 
-Please report security vulnerabilities to <security@example.com>.
+### Future Phases
 
-## License
+- Additional storage backends (Azure Blob, S3)
+- Comprehensive documentation and testing
+- Production hardening and optimization
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read our contributing guidelines before submitting PRs.
+
+## 📝 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
-- [HashiCorp](https://www.hashicorp.com/) for Terraform and protocol specifications
-- [Gin Web Framework](https://gin-gonic.com/) for the Go web framework
-- [React](https://reactjs.org/) and [Material-UI](https://mui.com/) for the frontend
-- All contributors who help improve this project
+- [HashiCorp Terraform](https://www.terraform.io/) - Module and Provider protocols
+- [Gin Web Framework](https://gin-gonic.com/) - Go HTTP framework
+- [React](https://react.dev/) - Frontend framework
+- [Material-UI](https://mui.com/) - Component library
 
-## Support
+## 📊 Project Status
 
-- Documentation: [docs/](docs/)
-- Issues: [GitHub Issues](https://github.com/your-org/terraform-registry/issues)
-- Discussions: [GitHub Discussions](https://github.com/your-org/terraform-registry/discussions)
+**Current Version:** 0.5.0 (Session 9 Complete)
 
-## Roadmap
+**Implementation Progress:**
 
-- [x] Phase 1: Project Foundation & Backend Core (Complete)
-- [x] Phase 2: Module Registry Protocol (Complete)
-- [x] Phase 3: Provider Registry and Network Mirror (Complete)
-- [ ] Phase 4: Authentication and Authorization
-- [ ] Phase 5: Frontend Web UI
-- [ ] Phase 6: Azure DevOps Extension
-- [ ] Phase 7: Kubernetes Deployment
-- [ ] Phase 8: Production Hardening
-- [ ] Phase 9: Performance Optimization
-
-## Status
-
-This project is under active development. Current phase: **Phase 4 - Authentication and Authorization**
-
-**Completed Phases:**
-
-- ✅ Phase 1: Core backend infrastructure, database, configuration, Docker deployment
-- ✅ Phase 2: Complete Module Registry Protocol with storage abstraction layer
-- ✅ Phase 3: Provider Registry Protocol & Network Mirror Protocol with multi-platform support
+- ✅ Phase 1: Project Foundation (100%)
+- ✅ Phase 2: Module Registry Protocol (100%)
+- ✅ Phase 3: Provider Registry & Network Mirror (100%)
+- ✅ Phase 4: Authentication & Authorization (100%)
+- ✅ Phase 5: Frontend SPA (100%)
+- ⏳ Phase 5A: SCM Integration (0% - Starting Session 10)
+- 📋 Phase 5B: Azure DevOps Extension (Planned)
+- 📋 Phase 6: Additional Storage & Deployment (Planned)
+- 📋 Phase 7: Documentation & Testing (Planned)
+- 📋 Phase 8: Production Polish (Planned)
 
 ---
 

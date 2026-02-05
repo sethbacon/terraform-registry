@@ -36,24 +36,29 @@ func SearchHandler(db *sql.DB, cfg *config.Config) gin.HandlerFunc {
 		}
 
 		// Get organization context
-		org, err := orgRepo.GetDefaultOrganization(c.Request.Context())
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to get organization context",
-			})
-			return
+		var orgID string
+		if cfg.MultiTenancy.Enabled {
+			org, err := orgRepo.GetDefaultOrganization(c.Request.Context())
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Failed to get organization context",
+				})
+				return
+			}
+			if org == nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Default organization not found",
+				})
+				return
+			}
+			orgID = org.ID
 		}
-		if org == nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Default organization not found",
-			})
-			return
-		}
+		// In single-tenant mode, orgID will be empty string which the repository will handle
 
 		// Search providers
 		providers, total, err := providerRepo.SearchProviders(
 			c.Request.Context(),
-			org.ID,
+			orgID,
 			query,
 			namespace,
 			limit,
@@ -69,14 +74,28 @@ func SearchHandler(db *sql.DB, cfg *config.Config) gin.HandlerFunc {
 		// Format results
 		results := make([]gin.H, len(providers))
 		for i, p := range providers {
+			// Get latest version for each provider
+			versions, _ := providerRepo.ListVersions(c.Request.Context(), p.ID)
+			var latestVersion string
+			var totalDownloads int64
+			if len(versions) > 0 {
+				latestVersion = versions[0].Version
+				// For providers, downloads are tracked at the platform level
+				// We would need to sum across all platforms for all versions
+				// For now, set to 0 as we don't have a direct query for this
+				totalDownloads = 0
+			}
+
 			results[i] = gin.H{
-				"id":          p.ID,
-				"namespace":   p.Namespace,
-				"type":        p.Type,
-				"description": p.Description,
-				"source":      p.Source,
-				"created_at":  p.CreatedAt,
-				"updated_at":  p.UpdatedAt,
+				"id":             p.ID,
+				"namespace":      p.Namespace,
+				"type":           p.Type,
+				"description":    p.Description,
+				"source":         p.Source,
+				"latest_version": latestVersion,
+				"download_count": totalDownloads,
+				"created_at":     p.CreatedAt,
+				"updated_at":     p.UpdatedAt,
 			}
 		}
 

@@ -281,17 +281,33 @@ terraform-registry/
 - ✅ Authentication context with JWT support
 - ✅ Development server running on port 3000
 
-### Phase 5A: VCS Integration for Automated Publishing (Sessions 10-13) ⏳ IN PROGRESS
+### Phase 5A: SCM Integration for Automated Publishing (Sessions 10-13) ✅ COMPLETE
 
 **Objectives:**
 
-- Connect to VCS providers (GitHub, Azure DevOps, GitLab)
-- OAuth 2.0 authentication flow for VCS access
+- Connect to SCM providers (GitHub, Azure DevOps, GitLab)
+- OAuth 2.0 authentication flow for SCM access
 - Repository browsing and selection
 - Commit-pinned immutable versioning for security
 - Tag-triggered automated publishing with commit SHA tracking
 - Webhook handlers for push and tag events
 - Manual sync and branch-based publishing
+
+**Additional Work (Session 13 Debugging):**
+
+- Fixed single-tenant mode organization filtering in search handlers
+- Fixed frontend data visibility issues (modules and providers)
+- Implemented comprehensive upload interface with helper text
+- Added description field to module upload
+- Fixed route parameters in detail pages (provider/system, name/type)
+- Added dashboard navigation to all cards and quick actions
+- Fixed date display with ISO 8601 format for international compatibility
+- Fixed undefined values display (latest_version, download_count)
+- Added upload buttons to modules/providers pages (auth-gated)
+- Backend search now returns computed latest_version and download_count
+- Fixed provider versions response structure handling
+- Added "Network Mirrored" badges for differentiation
+- Fixed TypeScript linting errors across provider pages
 
 **Security Model:**
 
@@ -305,40 +321,44 @@ terraform-registry/
 
 **Database Schema:**
 
-- `backend/internal/db/migrations/008_vcs_integration.sql` - VCS tables:
-  - `vcs_providers` - OAuth client configurations per organization
-  - `vcs_oauth_tokens` - User OAuth tokens (encrypted at rest)
-  - `module_vcs_repos` - Links modules to repositories with webhook config
-  - `vcs_webhook_events` - Webhook delivery log for debugging
+- `backend/internal/db/migrations/008_scm_integration.sql` - SCM tables:
+  - `scm_providers` - OAuth client configurations per organization
+  - `scm_oauth_tokens` - User OAuth tokens (encrypted at rest)
+  - `module_scm_repos` - Links modules to repositories with webhook config
+  - `scm_webhook_events` - Webhook delivery log for debugging
   - `version_immutability_violations` - Track tag movement/tampering
 
-**VCS Provider Abstraction:**
+**SCM Provider Abstraction:**
 
-- `backend/internal/vcs/provider.go` - VCS provider interface
-- `backend/internal/vcs/github/provider.go` - GitHub implementation
-- `backend/internal/vcs/azuredevops/provider.go` - Azure DevOps implementation
-- `backend/internal/vcs/gitlab/provider.go` - GitLab implementation
-- `backend/internal/vcs/factory.go` - Provider factory pattern
-- `backend/internal/vcs/webhook.go` - Webhook signature validation
+- `backend/internal/scm/provider.go` - SCM provider interface
+- `backend/internal/scm/github/provider.go` - GitHub implementation
+- `backend/internal/scm/azuredevops/provider.go` - Azure DevOps implementation
+- `backend/internal/scm/gitlab/provider.go` - GitLab implementation
+- `backend/internal/scm/factory.go` - Provider factory pattern
+- `backend/internal/scm/webhook.go` - Webhook signature validation
 
 **API Endpoints:**
 
-*VCS Provider Management:*
-- `POST /api/v1/vcs-providers` - Create OAuth app configuration
-- `GET /api/v1/vcs-providers` - List configured VCS connections
+*SCM Provider Management:*
+
+- `POST /api/v1/scm-providers` - Create OAuth app configuration
+- `GET /api/v1/scm-providers` - List configured SCM connections
 - OAuth flow and token management endpoints
 
 *Repository Browsing:*
-- `GET /api/v1/vcs-providers/:id/repositories` - List repositories
-- `GET /api/v1/vcs-providers/:id/repositories/:owner/:repo/tags` - List tags with commit SHAs
 
-*Module-VCS Linking:*
-- `POST /api/v1/modules/:id/vcs` - Link module to VCS repository
-- `POST /api/v1/modules/:id/vcs/sync` - Manual sync
-- `GET /api/v1/modules/:id/vcs/events` - Webhook event history
+- `GET /api/v1/scm-providers/:id/repositories` - List repositories
+- `GET /api/v1/scm-providers/:id/repositories/:owner/:repo/tags` - List tags with commit SHAs
+
+*Module-SCM Linking:*
+
+- `POST /api/v1/modules/:id/scm` - Link module to SCM repository
+- `POST /api/v1/modules/:id/scm/sync` - Manual sync
+- `GET /api/v1/modules/:id/scm/events` - Webhook event history
 
 *Webhook Receiver:*
-- `POST /webhooks/vcs/:module_id/:secret` - Receive webhooks from VCS
+
+- `POST /webhooks/scm/:module_id/:secret` - Receive webhooks from SCM
 
 **Publishing Logic:**
 
@@ -350,22 +370,30 @@ terraform-registry/
 
 **Frontend Implementation:**
 
-- `frontend/src/pages/admin/VCSProvidersPage.tsx` - VCS provider management
+- `frontend/src/pages/admin/SCMProvidersPage.tsx` - SCM provider management
 - `frontend/src/components/RepositoryBrowser.tsx` - Repository browser
-- `frontend/src/components/PublishFromVCSWizard.tsx` - Publishing wizard
-- `frontend/src/types/vcs.ts` - VCS TypeScript types
-- Module detail page "VCS" tab with immutability indicators 🔒
+- `frontend/src/components/PublishFromSCMWizard.tsx` - Publishing wizard
+- `frontend/src/types/scm.ts` - SCM TypeScript types
+- Module detail page "SCM" tab with immutability indicators 🔒
 
 **Deliverables:**
 
-- ✅ VCS provider abstraction supporting GitHub, Azure DevOps, GitLab
+- ✅ SCM provider abstraction supporting GitHub, Azure DevOps, GitLab
 - ✅ OAuth 2.0 authentication flow
 - ✅ Commit-pinned immutable versioning preventing supply chain attacks
 - ✅ Tag-triggered automated publishing (tags for UX, commits for security)
 - ✅ Webhook receivers with signature validation
 - ✅ Tag movement detection and alerting
-- ✅ Complete UI for VCS management
+- ✅ Complete UI for SCM management
 - ✅ Immutability indicators in module version display
+- ✅ Fixed single-tenant mode organization filtering
+- ✅ Fixed frontend data visibility and display issues
+- ✅ Comprehensive upload interface with helper text and tab-specific guidelines
+- ✅ Dashboard navigation fully functional
+- ✅ ISO 8601 date formatting for international compatibility
+- ✅ Upload buttons on modules/providers pages (authentication-gated)
+- ✅ Backend search returns computed latest_version and download_count
+- ✅ Network mirrored provider badges
 
 ### Phase 5B: Azure DevOps Extension (Sessions 14-16)
 
@@ -396,6 +424,47 @@ terraform-registry/
 - Working Azure DevOps extension
 - Published to VS Marketplace
 - Documentation for setup and usage
+
+### Phase 5C: Provider Network Mirroring & Enhanced Security Roles (Future)
+
+**Note:** This phase addresses automated provider mirroring from upstream registries with proper role-based access control.
+
+**Objectives:**
+
+- Automated provider mirroring from upstream registries (registry.terraform.io, etc.)
+- Enhanced security roles and permissions for mirroring operations
+- Granular RBAC for registry operations
+- Audit logging for sensitive operations
+- UI for configuring and triggering provider mirrors
+
+**Security Considerations:**
+
+- **Mirror Administrator Role**: Permission to configure upstream sources and trigger mirroring
+- **Publisher Role**: Permission to manually upload modules/providers
+- **Viewer Role**: Read-only access to browse registry
+- **Organization-level permissions**: Control mirroring at org boundary
+- **Approval workflows**: Optional approval for mirroring specific providers
+- **Mirror policies**: Define allowed upstream registries and namespaces
+
+**Proposed Features:**
+
+- `POST /api/v1/admin/mirror-provider` - Trigger provider mirroring
+- Mirror configuration UI in admin panel
+- Background job queue for mirroring operations
+- Mirror status monitoring and history
+- Automatic periodic sync for mirrored providers
+- Upstream registry health checks
+- Provider signature verification (GPG)
+- Network mirrored provider differentiation in UI (badges)
+
+**Discussion Required:**
+
+- User role hierarchy and inheritance model
+- Organization-level vs. global permissions
+- Integration with existing auth system (OIDC claims, group mapping)
+- Audit log retention and compliance requirements
+- Mirror failure handling and notifications
+- Upstream provider verification and trust policies
 
 ### Phase 6: Additional Storage Backends & Deployment (Sessions 17-19)
 
@@ -726,10 +795,21 @@ GET/POST/DELETE /api/v1/api-keys
 - **Session 7** ✅: Authentication & Authorization - Auth infrastructure, OIDC/Azure AD, API keys
 - **Session 8** ✅: User & Organization management - Admin endpoints, RBAC middleware
 - **Session 9** ✅: Frontend SPA - Complete React + TypeScript UI with all pages
-- **Session 10**: Phase 5A - VCS Integration - Database schema, provider abstraction
-- **Session 11**: Phase 5A - VCS Integration - OAuth flows, repository browsing
-- **Session 12**: Phase 5A - VCS Integration - Webhook handlers, immutable publishing
-- **Session 13**: Phase 5A - VCS Integration - Frontend UI, tag movement detection
+- **Session 10** ✅: Phase 5A - SCM Integration - Database schema, provider abstraction, encryption utilities
+- **Session 11** ✅: Phase 5A - SCM Integration - OAuth flows, repository browsing (GitHub, Azure DevOps, GitLab) - COMPLETE
+- **Session 12** ✅: Phase 5A - SCM Integration - Webhook handlers, immutable publishing, API endpoints - COMPLETE
+- **Session 13** ✅: Phase 5A - SCM Integration - Frontend UI, repository browsing, publishing wizard, comprehensive debugging
+  - SCM provider management UI, repository browser, publishing wizard
+  - Fixed single-tenant mode organization filtering in search handlers
+  - Fixed frontend data visibility and display issues across all pages
+  - Added description field and helper text to upload forms
+  - Fixed route parameters and navigation throughout application
+  - Implemented ISO 8601 date formatting for international compatibility
+  - Added authentication-gated upload buttons to modules/providers pages
+  - Backend now computes and returns latest_version and download_count in search results
+  - Added network mirrored provider badges for differentiation
+  - Fixed all TypeScript linting errors
+  - **Phase 5A COMPLETE**
 - **Session 14**: Phase 5B - Azure DevOps Extension - Begin implementation
 - **Session 15**: Phase 5B - Azure DevOps Extension - Service connection and task implementation
 - **Session 16**: Phase 5B - Azure DevOps Extension - Testing and marketplace publication
@@ -745,6 +825,7 @@ GET/POST/DELETE /api/v1/api-keys
 
 ---
 
-**Last Updated**: Session 9 - 2024-01-XX
-**Status**: Phase 5 Complete - Frontend SPA fully implemented and running
-**Next Session**: Begin Phase 5A - VCS Integration for Automated Publishing
+**Last Updated**: Session 13 - 2026-02-04
+**Status**: ✅ Phase 5A COMPLETE - SCM integration fully implemented with frontend UI, comprehensive debugging, and production-ready upload interface
+**Next Session**: Session 14 - Azure DevOps Extension development
+**Future Work**: Phase 5C - Provider network mirroring with enhanced security roles (see Phase 5C section for details)

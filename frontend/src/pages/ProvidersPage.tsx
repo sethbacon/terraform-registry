@@ -15,14 +15,15 @@ import {
   CircularProgress,
   Alert,
   Pagination,
-  Stack,
 } from '@mui/material';
-import { Search as SearchIcon } from '@mui/icons-material';
+import { Search as SearchIcon, CloudUpload } from '@mui/icons-material';
 import api from '../services/api';
 import { Provider } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 const ProvidersPage: React.FC = () => {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,12 +67,28 @@ const ProvidersPage: React.FC = () => {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Typography variant="h4" gutterBottom>
-        Terraform Providers
-      </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-        Browse and discover Terraform providers in your organization
-      </Typography>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Box>
+          <Typography variant="h4" gutterBottom>
+            Terraform Providers
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Browse and discover Terraform providers in your organization
+          </Typography>
+        </Box>
+        {isAuthenticated && (
+          <Button
+            variant="contained"
+            color="secondary"
+            startIcon={<CloudUpload />}
+            onClick={() => navigate('/admin/upload', { state: { tab: 1 } })}
+          >
+            Upload Provider
+          </Button>
+        )}
+      </Box>
+      <Box sx={{ mb: 4 }} />
 
       {/* Search Bar */}
       <TextField
@@ -130,11 +147,11 @@ const ProvidersPage: React.FC = () => {
                       cursor: 'pointer',
                     },
                   }}
-                  onClick={() => navigate(`/providers/${provider.namespace}/${provider.name}`)}
+                  onClick={() => navigate(`/providers/${provider.namespace}/${provider.type}`)}
                 >
                   <CardContent sx={{ flexGrow: 1 }}>
                     <Typography variant="h6" gutterBottom noWrap>
-                      {provider.name}
+                      {provider.type}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" gutterBottom>
                       {provider.namespace}
@@ -156,17 +173,28 @@ const ProvidersPage: React.FC = () => {
                       {provider.description || 'No description available'}
                     </Typography>
                     <Box sx={{ mt: 'auto' }}>
-                      <Chip
-                        label={`Latest: ${provider.latest_version}`}
-                        size="small"
-                        color="secondary"
-                        variant="outlined"
-                      />
-                      <Chip
-                        label={`${provider.download_count} downloads`}
-                        size="small"
-                        sx={{ ml: 1 }}
-                      />
+                      {provider.source && (
+                        <Chip
+                          label="Network Mirrored"
+                          size="small"
+                          color="info"
+                          variant="outlined"
+                          sx={{ mb: 1 }}
+                        />
+                      )}
+                      <Box>
+                        <Chip
+                          label={`Latest: ${provider.latest_version || 'N/A'}`}
+                          size="small"
+                          color="secondary"
+                          variant="outlined"
+                        />
+                        <Chip
+                          label={`${provider.download_count ?? 0} downloads`}
+                          size="small"
+                          sx={{ ml: 1 }}
+                        />
+                      </Box>
                     </Box>
                   </CardContent>
                   <CardActions>

@@ -3,6 +3,7 @@ package modules
 import (
 	"database/sql"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/terraform-registry/terraform-registry/internal/config"
@@ -62,11 +63,26 @@ func ListVersionsHandler(db *sql.DB, cfg *config.Config) gin.HandlerFunc {
 
 		// Format response per Terraform Module Registry Protocol spec
 		// https://www.terraform.io/docs/internals/module-registry-protocol.html
-		versionsList := make([]map[string]string, len(versions))
+		versionsList := make([]map[string]interface{}, len(versions))
 		for i, v := range versions {
-			versionsList[i] = map[string]string{
-				"version": v.Version,
+			versionData := map[string]interface{}{
+				"id":             v.ID,
+				"version":        v.Version,
+				"published_at":   v.CreatedAt.Format(time.RFC3339),
+				"download_count": v.DownloadCount,
 			}
+
+			// Include README if present
+			if v.Readme != nil {
+				versionData["readme"] = *v.Readme
+			}
+
+			// Include source URL if present
+			if v.PublishedBy != nil {
+				versionData["published_by"] = *v.PublishedBy
+			}
+
+			versionsList[i] = versionData
 		}
 
 		response := gin.H{

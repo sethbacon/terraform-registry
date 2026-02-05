@@ -24,6 +24,7 @@ type ModuleVersion struct {
 	StorageBackend string
 	SizeBytes      int64
 	Checksum       string
+	Readme         *string
 	PublishedBy    *string
 	DownloadCount  int64
 	CreatedAt      time.Time

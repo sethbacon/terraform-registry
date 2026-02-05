@@ -28,8 +28,8 @@ const LoginPage: React.FC = () => {
       email: 'admin@dev.local',
       username: 'Dev Admin',
       role: 'admin' as const,
-      organization_id: 'dev-org-1',
-      organization_name: 'Development Org',
+      organization_id: 'cb1726d0-187b-4035-828f-15a70b3f93a1', // bconline organization
+      organization_name: 'bconline',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };

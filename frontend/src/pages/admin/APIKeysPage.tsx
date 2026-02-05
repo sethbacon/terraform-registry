@@ -62,9 +62,11 @@ const APIKeysPage: React.FC = () => {
       setLoading(true);
       setError(null);
       const keys = await api.listAPIKeys();
-      setApiKeys(keys);
+      // Ensure keys is always an array
+      setApiKeys(Array.isArray(keys) ? keys : []);
     } catch (err) {
       console.error('Failed to load API keys:', err);
+      setApiKeys([]);
       setError('Failed to load API keys. Please try again.');
     } finally {
       setLoading(false);

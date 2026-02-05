@@ -34,15 +34,11 @@ class ApiClient {
     // Response interceptor for error handling
     this.client.interceptors.response.use(
       (response) => {
-        // In dev mode with no backend, return mock data for failed requests
-        if (IS_DEV_MODE && (response.status === 404 || response.status >= 500)) {
-          return this.getMockResponse(response.config.url || '');
-        }
         return response;
       },
       (error: AxiosError) => {
-        // In dev mode, return mock data instead of failing
-        if (IS_DEV_MODE && error.code === 'ERR_NETWORK') {
+        // In dev mode, return mock data for all errors
+        if (IS_DEV_MODE) {
           return this.getMockResponse(error.config?.url || '');
         }
         
@@ -63,13 +59,15 @@ class ApiClient {
 
     if (url.includes('/modules') && !url.includes('/versions')) {
       mockData.data = { modules: [], meta: { total: 0, limit: 10, offset: 0 } };
-    } else if (url.includes('/providers') && !url.includes('/versions')) {
+    } else if (url.includes('/providers') && !url.includes('/versions') && !url.includes('/scm-providers')) {
       mockData.data = { providers: [], meta: { total: 0, limit: 10, offset: 0 } };
     } else if (url.includes('/users')) {
       mockData.data = { users: [], meta: { total: 0, limit: 10, offset: 0 } };
     } else if (url.includes('/organizations')) {
       mockData.data = [];
     } else if (url.includes('/apikeys')) {
+      mockData.data = [];
+    } else if (url.includes('/scm-providers')) {
       mockData.data = [];
     } else if (url.includes('/versions')) {
       mockData.data = { versions: [] };
@@ -328,7 +326,119 @@ class ApiClient {
     const response = await this.client.delete(`/api/v1/apikeys/${id}`);
     return response.data;
   }
+
+  // SCM Provider Management
+  async listSCMProviders(organizationId?: string) {
+    const params = organizationId ? { organization_id: organizationId } : {};
+    const response = await this.client.get('/api/v1/scm-providers', { params });
+    return response.data;
+  }
+
+  async createSCMProvider(data: {
+    organization_id: string;
+    provider_type: string;
+    name: string;
+    base_url?: string | null;
+    client_id: string;
+    client_secret: string;
+    webhook_secret?: string;
+  }) {
+    const response = await this.client.post('/api/v1/scm-providers', data);
+    return response.data;
+  }
+
+  async getSCMProvider(id: string) {
+    const response = await this.client.get(`/api/v1/scm-providers/${id}`);
+    return response.data;
+  }
+
+  async updateSCMProvider(
+    id: string,
+    data: {
+      name?: string;
+      base_url?: string | null;
+      client_id?: string;
+      client_secret?: string;
+      webhook_secret?: string;
+      is_active?: boolean;
+    }
+  ) {
+    const response = await this.client.put(`/api/v1/scm-providers/${id}`, data);
+    return response.data;
+  }
+
+  async deleteSCMProvider(id: string) {
+    const response = await this.client.delete(`/api/v1/scm-providers/${id}`);
+    return response.data;
+  }
+
+  // SCM OAuth
+  async initiateSCMOAuth(providerId: string) {
+    const response = await this.client.get(`/api/v1/scm-providers/${providerId}/oauth/authorize`);
+    return response.data;
+  }
+
+  async refreshSCMToken(providerId: string) {
+    const response = await this.client.post(`/api/v1/scm-providers/${providerId}/oauth/refresh`);
+    return response.data;
+  }
+
+  async revokeSCMToken(providerId: string) {
+    const response = await this.client.delete(`/api/v1/scm-providers/${providerId}/oauth/token`);
+    return response.data;
+  }
+
+  // Module SCM Linking
+  async linkModuleToSCM(
+    moduleId: string,
+    data: {
+      provider_id: string;
+      repository_owner: string;
+      repository_name: string;
+      repository_path?: string;
+      default_branch?: string;
+      auto_publish_enabled?: boolean;
+      tag_pattern?: string;
+    }
+  ) {
+    const response = await this.client.post(`/api/v1/modules/${moduleId}/scm`, data);
+    return response.data;
+  }
+
+  async getModuleSCMInfo(moduleId: string) {
+    const response = await this.client.get(`/api/v1/modules/${moduleId}/scm`);
+    return response.data;
+  }
+
+  async updateModuleSCMLink(
+    moduleId: string,
+    data: {
+      repository_path?: string;
+      default_branch?: string;
+      auto_publish_enabled?: boolean;
+      tag_pattern?: string;
+    }
+  ) {
+    const response = await this.client.put(`/api/v1/modules/${moduleId}/scm`, data);
+    return response.data;
+  }
+
+  async unlinkModuleFromSCM(moduleId: string) {
+    const response = await this.client.delete(`/api/v1/modules/${moduleId}/scm`);
+    return response.data;
+  }
+
+  async triggerManualSync(moduleId: string, data?: { tag_name?: string; commit_sha?: string }) {
+    const response = await this.client.post(`/api/v1/modules/${moduleId}/scm/sync`, data || {});
+    return response.data;
+  }
+
+  async getWebhookEvents(moduleId: string) {
+    const response = await this.client.get(`/api/v1/modules/${moduleId}/scm/events`);
+    return response.data;
+  }
 }
 
 export const apiClient = new ApiClient();
 export default apiClient;
+

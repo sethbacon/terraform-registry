@@ -1,6 +1,6 @@
 module github.com/terraform-registry/terraform-registry
 
-go 1.23
+go 1.24.0
 
 require (
 	github.com/coreos/go-oidc/v3 v3.17.0
@@ -9,6 +9,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.17.0
 	github.com/google/uuid v1.4.0
 	github.com/hashicorp/go-version v1.8.0
+	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.10.9
 	github.com/spf13/viper v1.18.2
 	golang.org/x/crypto v0.47.0

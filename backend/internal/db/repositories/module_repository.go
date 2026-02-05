@@ -98,8 +98,8 @@ func (r *ModuleRepository) UpdateModule(ctx context.Context, module *models.Modu
 // CreateVersion inserts a new module version
 func (r *ModuleRepository) CreateVersion(ctx context.Context, version *models.ModuleVersion) error {
 	query := `
-		INSERT INTO module_versions (module_id, version, storage_path, storage_backend, size_bytes, checksum, published_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO module_versions (module_id, version, storage_path, storage_backend, size_bytes, checksum, readme, published_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at
 	`
 
@@ -110,6 +110,7 @@ func (r *ModuleRepository) CreateVersion(ctx context.Context, version *models.Mo
 		version.StorageBackend,
 		version.SizeBytes,
 		version.Checksum,
+		version.Readme,
 		version.PublishedBy,
 	).Scan(&version.ID, &version.CreatedAt)
 
@@ -123,7 +124,7 @@ func (r *ModuleRepository) CreateVersion(ctx context.Context, version *models.Mo
 // GetVersion retrieves a specific module version
 func (r *ModuleRepository) GetVersion(ctx context.Context, moduleID, version string) (*models.ModuleVersion, error) {
 	query := `
-		SELECT id, module_id, version, storage_path, storage_backend, size_bytes, checksum, published_by, download_count, created_at
+		SELECT id, module_id, version, storage_path, storage_backend, size_bytes, checksum, readme, published_by, download_count, created_at
 		FROM module_versions
 		WHERE module_id = $1 AND version = $2
 	`
@@ -137,6 +138,7 @@ func (r *ModuleRepository) GetVersion(ctx context.Context, moduleID, version str
 		&v.StorageBackend,
 		&v.SizeBytes,
 		&v.Checksum,
+		&v.Readme,
 		&v.PublishedBy,
 		&v.DownloadCount,
 		&v.CreatedAt,
@@ -155,7 +157,7 @@ func (r *ModuleRepository) GetVersion(ctx context.Context, moduleID, version str
 // ListVersions retrieves all versions for a module, ordered by version DESC
 func (r *ModuleRepository) ListVersions(ctx context.Context, moduleID string) ([]*models.ModuleVersion, error) {
 	query := `
-		SELECT id, module_id, version, storage_path, storage_backend, size_bytes, checksum, published_by, download_count, created_at
+		SELECT id, module_id, version, storage_path, storage_backend, size_bytes, checksum, readme, published_by, download_count, created_at
 		FROM module_versions
 		WHERE module_id = $1
 		ORDER BY created_at DESC
@@ -178,6 +180,7 @@ func (r *ModuleRepository) ListVersions(ctx context.Context, moduleID string) ([
 			&v.StorageBackend,
 			&v.SizeBytes,
 			&v.Checksum,
+			&v.Readme,
 			&v.PublishedBy,
 			&v.DownloadCount,
 			&v.CreatedAt,
@@ -214,9 +217,18 @@ func (r *ModuleRepository) IncrementDownloadCount(ctx context.Context, versionID
 // SearchModules searches for modules matching the query
 func (r *ModuleRepository) SearchModules(ctx context.Context, orgID, query, namespace, system string, limit, offset int) ([]*models.Module, int, error) {
 	// Build WHERE clause
-	whereClause := "WHERE organization_id = $1"
-	args := []interface{}{orgID}
-	argCount := 1
+	var whereClause string
+	var args []interface{}
+	argCount := 0
+
+	// Only filter by organization if orgID is provided (multi-tenant mode)
+	if orgID != "" {
+		argCount++
+		whereClause = fmt.Sprintf("WHERE organization_id = $%d", argCount)
+		args = append(args, orgID)
+	} else {
+		whereClause = "WHERE 1=1" // No org filter in single-tenant mode
+	}
 
 	if query != "" {
 		argCount++

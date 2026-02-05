@@ -61,6 +61,7 @@ export interface ModuleVersion {
   storage_backend: string;
   size_bytes: number;
   checksum: string;
+  readme?: string;
   download_count: number;
   created_at: string;
 }
@@ -72,10 +73,24 @@ export interface Provider {
   description?: string;
   source?: string;
   organization_id: string;
+  organization_name?: string;
   latest_version?: string; // Latest version string
   download_count?: number; // Total downloads
   created_at: string;
   updated_at: string;
+}
+
+export interface ProviderPlatform {
+  id: string;
+  provider_version_id: string;
+  os: string;
+  arch: string;
+  filename: string;
+  storage_path: string;
+  storage_backend: string;
+  size_bytes: number;
+  shasum: string;
+  download_count: number;
 }
 
 export interface ProviderVersion {
@@ -86,6 +101,9 @@ export interface ProviderVersion {
   gpg_public_key: string;
   shasums_url: string;
   shasums_signature_url: string;
+  published_at: string;
+  download_count?: number;
+  platforms?: ProviderPlatform[];
   created_at: string;
 }
 

@@ -3,6 +3,7 @@ package providers
 import (
 	"database/sql"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/terraform-registry/terraform-registry/internal/config"
@@ -76,15 +77,20 @@ func ListVersionsHandler(db *sql.DB, cfg *config.Config) gin.HandlerFunc {
 			platformsList := make([]gin.H, 0, len(platforms))
 			for _, p := range platforms {
 				platformsList = append(platformsList, gin.H{
-					"os":   p.OS,
-					"arch": p.Arch,
+					"id":             p.ID,
+					"os":             p.OS,
+					"arch":           p.Arch,
+					"filename":       p.Filename,
+					"shasum":         p.Shasum,
+					"download_count": p.DownloadCount,
 				})
 			}
 
 			versionsList = append(versionsList, gin.H{
-				"version":   v.Version,
-				"protocols": v.Protocols,
-				"platforms": platformsList,
+				"version":      v.Version,
+				"protocols":    v.Protocols,
+				"platforms":    platformsList,
+				"published_at": v.CreatedAt.Format(time.RFC3339),
 			})
 		}
 

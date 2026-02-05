@@ -30,6 +30,7 @@ import {
   Key,
   CloudUpload,
   Home,
+  GitHub,
 } from '@mui/icons-material';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -76,6 +77,7 @@ const Layout = () => {
         { text: 'Users', icon: <People />, path: '/admin/users' },
         { text: 'Organizations', icon: <Business />, path: '/admin/organizations' },
         { text: 'API Keys', icon: <Key />, path: '/admin/apikeys' },
+        { text: 'SCM Providers', icon: <GitHub />, path: '/admin/scm-providers' },
       ]
     : [];
 

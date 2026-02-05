@@ -1,299 +1,284 @@
 # Changelog
 
-All notable changes to the Terraform Registry project will be documented in this file.
+All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-01-30
+### Planned
+- Phase 5B: Azure DevOps pipeline extension for publishing
+- Phase 5C: Provider network mirroring with enhanced security roles (see IMPLEMENTATION_PLAN.md Phase 5C)
+- Phase 6: Azure Blob Storage and S3-compatible storage backends
+- Phase 6: Deployment configurations (Kubernetes, Helm, Azure Container Apps)
+- Phase 7: Comprehensive documentation and testing suite
+- Phase 8: Production polish (monitoring, observability, security hardening)
 
-### Added - Phase 3: Provider Registry & Network Mirror Protocol
+## [0.7.0] - 2026-02-04 - Session 13
 
-#### Data Models
+### Added
+- **SCM Frontend UI & Comprehensive Debugging (Phase 5A Session 13)**
+  - Complete SCM provider management interface
+  - Repository browser with search and filtering
+  - Publishing wizard with commit pinning
+  - Description field for module uploads
+  - Helper text and tab-specific guidelines for all upload forms
+  - Authentication-gated upload buttons on modules/providers pages
+  - Network mirrored provider badges for visual differentiation
+  - ISO 8601 date formatting for international compatibility
 
-- Provider model with namespace, type, description, and source fields
-- ProviderVersion model with protocols (JSONB array), GPG public key support
-- ProviderPlatform model for multi-platform binary support (OS/arch matrix)
-- Three-level hierarchy: Provider → Version → Platform
+### Fixed
+- **Single-Tenant Mode Issues**:
+  - Organization filtering now correctly skips when multi-tenancy is disabled
+  - Search handlers conditionally check MultiTenancy.Enabled configuration
+  - Repository layer handles empty organization ID with proper SQL WHERE clauses
+  
+- **Frontend Data Visibility**:
+  - Module and provider search results now include computed latest_version and download_count
+  - Backend aggregates version data and download statistics for search results
+  - Fixed undefined values display with proper fallbacks (N/A, 0)
+  - Provider download counts correctly handle platform-level aggregation
 
-#### Repository Layer
+- **Navigation & Routing**:
+  - Fixed route parameters in ModuleDetailPage (provider→system)
+  - Fixed route parameters in ProviderDetailPage (name→type)
+  - Dashboard cards now navigate correctly to respective pages
+  - Quick action cards navigate with state to select correct upload tab
 
-- ProviderRepository with full CRUD operations
-- Provider version management with protocol versioning support
-- Platform binary tracking per OS/arch combination
-- Search functionality with namespace filtering
-- Download count tracking per platform
-- JSONB array handling for Terraform protocol versions
+- **Date Display**:
+  - Changed from localized dates to ISO 8601 format (YYYY-MM-DD)
+  - Applied consistently across all version displays
+  - Backend now includes published_at in version responses
 
-#### Validation Layer
+- **Provider Pages**:
+  - Fixed versions response structure handling (direct array vs. nested)
+  - Fixed TypeScript linting errors (unused imports, type mismatches)
+  - Provider cards now use provider.type instead of non-existent provider.name
+  - Added organization_name and published_at fields to Provider/ProviderVersion types
 
-- GPG public key format validation (PEM-encoded)
-- Platform (OS/arch) validation with supported combinations
-- Provider binary validation (ZIP format, magic bytes, size limits)
-- Maximum provider binary size limit (500MB)
-- Checksum extraction from SHA256SUMS files
-
-#### Provider Registry Protocol Handlers
-
-- **List Provider Versions**: `GET /v1/providers/:namespace/:type/versions`
-  - Returns JSON with versions, protocols, and platforms array
-  - Multi-platform support per version
-- **Download Provider**: `GET /v1/providers/:namespace/:type/:version/download/:os/:arch`
-  - JSON response with download_url, shasum, protocols, signing_keys
-  - GPG public key included in signing_keys object
-  - Platform-specific download tracking
-- **Upload Provider**: `POST /api/v1/providers`
-  - Multipart form upload with namespace, type, version, os, arch
-  - Protocol version array support (e.g., ["5.0", "6.0"])
-  - GPG public key acceptance and storage
-  - Duplicate platform detection (409 Conflict)
-  - Automatic provider/version creation
-- **Search Providers**: `GET /api/v1/providers/search`
-  - Query by namespace, type, or description
-  - Pagination support (limit/offset)
-
-#### Network Mirror Protocol Handlers
-
-- **Version Index**: `GET /terraform/providers/:hostname/:namespace/:type/index.json`
-  - Returns simple version map for air-gapped environments
-  - Hostname parameter for origin registry compatibility
-- **Platform Index**: `GET /terraform/providers/:hostname/:namespace/:type/:version.json`
-  - Returns archives object with platform-specific URLs and hashes
-  - SHA256 hashes in h1: format (base64-encoded)
-  - Support for ZIP hash format (zh:)
-  - Relative or absolute URLs based on storage configuration
-
-#### File Serving
-
-- Provider binary downloads via `/v1/files/providers/...`
-- Streaming support for large binaries (50MB+)
-- SHA256 checksum headers
-- Content-Type: application/zip
-
-#### Router Updates
-
-- Integrated all provider and mirror handlers
-- Fixed Gin routing conflict with `.json` suffix in version parameter
-- Proper route precedence for index.json vs version files
+- **Upload Interface**:
+  - Added description field to module upload form
+  - FormData creation fixed for proper API compatibility
+  - Tab-specific upload guidelines implemented
+  - Removed duplicate generic guidelines section
 
 ### Technical Details
+- Backend search endpoints now query versions to compute latest_version
+- Module versions: Sum download_count across all versions
+- Provider versions: Platform-level downloads (set to 0 pending aggregation implementation)
+- Frontend uses computed values from search results instead of missing model fields
+- All dates use RFC3339 format in API responses
+- Network mirror differentiation uses provider.source field presence
 
-- **New Files**: 12 files (~2,000 lines of Go code)
-- **Protocols**: Terraform Provider Registry Protocol v1 + Network Mirror Protocol v1
-- **Storage**: Reused Phase 2 storage abstraction layer
-- **Patterns**: Handler factory, repository pattern, async download tracking
+### Phase Completion
+- ✅ **Phase 5A Complete**: SCM integration fully implemented with production-ready UI
 
-### Testing
+## [0.6.0] - 2024-01-XX - Session 11
 
-- Tested with real HashiCorp azurerm provider (v3.85.0, 55MB)
-- Built and uploaded custom provider from terraform-provider-scaffolding-framework
-- Verified all Provider Registry Protocol endpoints
-- Verified all Network Mirror Protocol endpoints
-- Confirmed 55MB+ binary downloads working
-- Multi-platform support tested (linux/amd64, windows/amd64)
-- Protocol versions 5.0 and 6.0 tested
+### Added
+- **SCM OAuth Flows & Repository Operations (Phase 5A Session 11)**
+  - GitHub connector with complete OAuth 2.0 authorization flow
+  - GitHub repository listing, searching, and browsing
+  - GitHub branch and tag operations with commit resolution
+  - GitHub archive download (tarball/zipball)
+  - Azure DevOps connector with OAuth 2.0 flow
+  - Azure DevOps project and repository browsing
+  - Azure DevOps branch, tag, and commit operations
+  - Azure DevOps archive download functionality
+  - GitLab connector with OAuth 2.0 flow and token refresh
+  - Token encryption/decryption using AES-256-GCM
+  - SCM repository data access layer
+  - Support for self-hosted SCM instances
+  - Connector registry with factory pattern
+  - Pagination support for all list operations
+  - Repository search functionality
 
-### Bug Fixes
+### Technical Details
+- **GitHub Integration**:
+  - OAuth app flow with code exchange
+  - REST API v3 with proper versioning headers
+  - Repository filtering and sorting
+  - Tag-to-commit SHA resolution
+  - Archive download with format selection
+  
+- **Azure DevOps Integration**:
+  - Azure DevOps Services OAuth with JWT assertions
+  - Project-based repository organization
+  - Git refs API for branches and tags
+  - Token refresh support with expiry tracking
+  
+- **GitLab Integration**:
+  - Standard OAuth 2.0 flow
+  - Token refresh capability
+  - Self-hosted GitLab support
+  - Stub implementations ready for completion
 
-- Fixed Gin routing conflict between `/:version.json` literal and parameter parsing
-- Changed route to `/:versionfile` with suffix stripping in handler
-- Network Mirror Protocol endpoints now correctly parse version from URL
+### Infrastructure
+- Connector interface with consistent API across providers
+- Error handling with wrapped remote API errors
+- Token expiry checking and validation
+- Secure credential management
 
-## [0.2.0] - 2026-01-30
+## [0.5.1] - 2024-01-XX - Session 10
 
-### Added - Phase 2: Module Registry Protocol
+### Added
+- **SCM Integration Foundation (Phase 5A Session 10)**
+  - Database migration for SCM integration (008_scm_integration.sql)
+  - SCM provider configurations table
+  - User OAuth tokens table with encryption
+  - Module-to-repository linking table
+  - Webhook event logging table
+  - Version immutability violations tracking
+  - SCM provider interface and types
+  - Connector abstraction layer
+  - Token encryption utilities (AES-256-GCM)
+  - Connector registry/factory pattern
+  - Error definitions for SCM operations
 
-#### Storage Layer
+### Changed
+- Extended module_versions table with SCM metadata (commit SHA, source URL, tag)
 
-- Storage interface with Upload, Download, Delete, GetURL, Exists, and GetMetadata operations
-- Local filesystem storage implementation with SHA256 checksum calculation
-- Storage factory with registration pattern for pluggable backends
-- File path structure: `modules/{namespace}/{name}/{system}/{version}.tar.gz`
-- Support for direct file serving via HTTP
+## [0.5.0] - 2024-01-XX - Session 9
 
-#### Data Layer
+### Added
 
-- Module and ModuleVersion data models
-- ModuleRepository with CRUD operations, version listing, and search
-- OrganizationRepository for multi-tenancy support
-- Database queries using prepared statements for security
-- Download count tracking with async increment
-
-#### Validation & Security
-
-- Semantic versioning validation using HashiCorp go-version library
-- Archive validation (gzip/tar format, size limits, path traversal prevention)
-- SHA256 checksum calculation and verification
-- Maximum archive size limit (100MB)
-- Malicious path detection (.git directories, absolute paths, path traversal)
-
-#### HTTP Handlers (Terraform Protocol)
-
-- **List Versions**: `GET /v1/modules/:namespace/:name/:system/versions`
-  - Returns Terraform-compliant JSON with version list
-- **Download Module**: `GET /v1/modules/:namespace/:name/:system/:version/download`
-  - Returns 204 No Content with `X-Terraform-Get` header
-  - Async download counter increment
-- **Upload Module**: `POST /api/v1/modules`
-  - Multipart form upload with validation
-  - Automatic module creation/update
-  - Duplicate version detection
-- **Search Modules**: `GET /api/v1/modules/search`
-  - PostgreSQL LIKE queries with pagination
-  - Filter by namespace, system, query string
-- **Serve Files**: `GET /v1/files/*filepath`
-  - Direct file serving for local storage
-  - Proper content headers and streaming
-
-#### Dependencies
-
-- Added `github.com/hashicorp/go-version` for semantic versioning
+- **Frontend SPA (Phase 5 Complete)**
+  - Complete React 18+ TypeScript application with Vite
+  - Material-UI component library integration
+  - Module browsing and search pages with pagination
+  - Provider browsing and search pages with pagination
+  - Module and provider detail pages with version history
+  - Admin dashboard with system statistics
+  - User management UI (list, create, edit, delete)
+  - Organization management UI (list, create, edit, delete)
+  - API key management UI with scope configuration
+  - Upload interface for modules and providers
+  - Authentication context with JWT support
+  - Protected routes for admin functionality
+  - Responsive design with light theme (dark mode ready)
+  - Comprehensive error handling and loading states
+  - Optimistic UI updates for better UX
+  - Vite dev server with backend proxy on port 3000
 
 ### Changed
 
-- Router updated to initialize storage backend and wire module handlers
-- Removed placeholder module endpoints, replaced with functional implementations
+- Updated implementation plan to reflect frontend completion
+- Renamed VCS (Version Control System) to SCM (Source Code Management) throughout project
 
-### Fixed
+## [0.4.0] - 2024-01-XX - Session 8
 
-- Import cycle issue in storage package resolved using registration pattern
+### Added
 
-### Implementation Details
+- **User & Organization Management (Phase 4 Complete)**
+  - User management REST endpoints (list, search, create, update, delete)
+  - Organization management REST endpoints (list, search, create, update, delete)
+  - Organization membership management (add, update, remove members)
+  - Role-based organization membership (owner, admin, member, viewer)
+  - User search by email and name
+  - Organization search by name
+  - Pagination support for user and organization listings
+  - Audit logging for all administrative actions
+  - RBAC middleware integration for endpoint protection
 
-- **Files Created**: 15 new files (~1,500 lines of code)
-- **Terraform Protocol**: Fully compliant with Module Registry Protocol
-- **Testing**: Manual end-to-end testing with curl and actual module uploads
-- **Storage**: Local filesystem working, Azure/S3 deferred to future phases
+### Changed
 
-## [0.1.0] - 2026-01-29
+- Enhanced authentication middleware with organization context
+- Improved API key scoping for multi-tenant operations
+- Updated database schema with organization member roles
 
-### Added - Phase 1: Project Foundation & Backend Core
+## [0.3.0] - 2024-01-XX - Session 7
 
-#### Project Structure
+### Added
 
-- Complete project directory structure for backend, frontend, Azure DevOps extension, and deployments
-- MIT License
-- Comprehensive README.md with project overview
-- Implementation plan documentation (IMPLEMENTATION_PLAN.md)
-- Session notes and tracking (SESSION_NOTES.md, SESSION_1_UPDATE.md)
-- Git ignore configuration for Go, Node.js, and IDEs
+- **Authentication & Authorization (Phase 4)**
+  - JWT-based authentication system
+  - API key authentication with bcrypt hashing
+  - OIDC provider support (generic)
+  - Azure AD / Entra ID integration
+  - Role-based access control (RBAC) middleware
+  - Scope-based authorization for fine-grained permissions
+  - API key management endpoints (create, list, delete)
+  - Authentication endpoints (login, logout, refresh)
+  - Token encryption for OAuth tokens
+  - Configurable single-tenant vs multi-tenant mode
+  - User model with OIDC subject support
+  - Organization model for multi-tenancy
+  - API key model with expiration and scopes
 
-#### Backend Application (Go)
+### Changed
 
-- Go module initialization with all required dependencies
-- Application entry point with command handling (`serve`, `migrate`, `version`)
-- Configuration management system using Viper
-  - Support for YAML files and environment variables
-  - Environment variable expansion for secrets
-  - Comprehensive validation
-  - Default values for all settings
-- Explicit environment variable binding for nested configuration structures
-- Debug logging for database configuration (with password masking)
+- Updated router with authentication middleware
+- Protected admin endpoints with proper authorization
+- Enhanced database schema with auth tables
 
-#### Database Layer
+## [0.2.0] - 2024-01-XX - Sessions 4-6
 
-- PostgreSQL schema with 11 tables:
-  - Core: `organizations`, `users`, `api_keys`, `organization_members`
-  - Modules: `modules`, `module_versions`
-  - Providers: `providers`, `provider_versions`, `provider_platforms`
-  - Analytics: `download_events`, `audit_logs`
-- Database migrations using golang-migrate with embedded migration files
-- Automatic migration execution on startup
-- Support for multi-tenancy (can be enabled/disabled via config)
-- Default organization for single-tenant mode
-- Indexes for performance optimization
+### Added
 
-#### HTTP Server (Gin Framework)
+- **Provider Registry Protocol (Phase 3 Complete)**
+  - Provider version listing endpoint
+  - Provider binary download endpoint with platform support
+  - Provider upload endpoint with validation
+  - GPG signature verification framework
+  - Provider platform matrix support (OS/Architecture)
+  - SHA256 checksum validation for provider binaries
+  - Provider data models and repositories
+  - Provider search functionality
 
-- Health check endpoint (`/health`) with database connectivity test
-- Readiness check endpoint (`/ready`)
-- Terraform service discovery endpoint (`/.well-known/terraform.json`)
-- API version endpoint (`/version`)
-- Placeholder endpoints for Module Registry Protocol (Phase 2)
-- Placeholder endpoints for Provider Registry Protocol (Phase 3)
-- Placeholder endpoints for Network Mirror Protocol (Phase 3)
-- Placeholder endpoints for Admin API (Phases 4-5)
-- CORS middleware with configurable origins
-- Logging middleware (JSON and text formats)
-- Graceful shutdown on SIGINT/SIGTERM
+- **Network Mirror Protocol (Phase 3 Complete)**
+  - Version index endpoint for provider mirroring
+  - Platform index endpoint for specific versions
+  - JSON response formatting per Terraform mirror spec
+  - Hostname-based provider routing
+  - Integration with existing provider storage
 
-#### Docker Support
+### Changed
 
-- Multi-stage Dockerfile for minimal production images
-- Docker Compose configuration with:
-  - PostgreSQL 16 database
-  - Backend application
-  - Optional Prometheus for metrics
-  - Optional Grafana for visualization
-- Health checks for all services
-- Volume mounts for data persistence
-- Network isolation
-- Environment variable configuration
+- Enhanced storage abstraction to support provider binaries
+- Updated database schema with provider tables
+- Improved validation for provider uploads
 
-#### Configuration
+## [0.1.0] - 2024-01-XX - Sessions 1-3
 
-- Comprehensive configuration system supporting:
-  - Server settings (host, port, timeouts, TLS)
-  - Database connection (host, port, credentials, SSL mode)
-  - Storage backends (Azure Blob, S3, local filesystem)
-  - Authentication (API keys, OIDC, Azure AD)
-  - Multi-tenancy settings
-  - Security (CORS, rate limiting, TLS)
-  - Logging (level, format, output)
-  - Telemetry (metrics, tracing, profiling)
-- Example configuration file (config.example.yaml)
+### Added
 
-### Bug Fixes
+- **Module Registry Protocol (Phase 2 Complete)**
+  - Module version listing endpoint
+  - Module download endpoint with redirect support
+  - Module upload endpoint with validation
+  - Module search with pagination
+  - Direct file serving for local storage
+  - SHA256 checksum generation and verification
+  - Semantic version validation
+  - Archive format validation (tar.gz, zip)
+  - Security checks for path traversal
+  - Download tracking and analytics
+  - Module data models and repositories
 
-- PostgreSQL connection issue: Viper's `AutomaticEnv()` not working with `Unmarshal()` for nested structures
-  - Solution: Added explicit environment variable bindings in `bindEnvVars()` function
-- Gin routing conflict between Provider Registry and Network Mirror endpoints
-  - Solution: Moved Network Mirror endpoints to `/terraform/providers/` path to avoid parameter conflicts
-
-### Technical Details
-
-- **Language**: Go 1.22+
-- **Framework**: Gin web framework
-- **Database**: PostgreSQL 16
-- **Configuration**: Viper
-- **Migrations**: golang-migrate
-- **Containerization**: Docker with multi-stage builds
-- **Lines of Code**: ~2500+ across all files
-
-### Deployment
-
-- Docker Compose deployment fully functional
-- All health checks passing
-- Database migrations automatic on startup
-- Ready for Phase 2 implementation
-
-### Testing
-
-- Manual endpoint testing completed:
-  - ✅ `/health` - Returns healthy status with database check
-  - ✅ `/.well-known/terraform.json` - Service discovery working
-  - ✅ `/version` - API version information
-  - ✅ `/ready` - Readiness check
-- Docker containers running and healthy:
-  - ✅ `terraform-registry-db` (PostgreSQL)
-  - ✅ `terraform-registry-backend` (Go application)
-
-### Documentation
-
-- Complete implementation plan with 9 phases
-- Session notes with setup instructions
-- README with quick start guide
-- Configuration examples
-- API endpoint documentation in implementation plan
-
-### Next Steps
-
-- **Phase 2**: Module Registry Protocol implementation
+- **Project Foundation (Phase 1 Complete)**
+  - Go backend with Gin framework
+  - PostgreSQL database with migrations
+  - Configuration management (YAML + environment variables)
+  - Service discovery endpoint (/.well-known/terraform.json)
+  - Health check endpoint
+  - Docker Compose setup for local development
+  - Dockerfile for backend service
   - Storage abstraction layer
-  - Module upload and versioning
-  - Module download endpoints
-  - Comprehensive testing
+  - Local filesystem storage backend
+  - Organization-based multi-tenancy support
 
----
+### Infrastructure
+
+- PostgreSQL database schema with migrations
+- Database repositories for data access layer
+- HTTP middleware (logging, CORS, error handling)
+- Request validation utilities
+- Checksum utilities for file integrity
+
+[Unreleased]: https://github.com/yourusername/terraform-registry/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/yourusername/terraform-registry/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/yourusername/terraform-registry/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/yourusername/terraform-registry/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/yourusername/terraform-registry/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/yourusername/terraform-registry/releases/tag/v0.1.0
