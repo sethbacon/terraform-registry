@@ -17,15 +17,18 @@ type Module struct {
 
 // ModuleVersion represents a specific version of a module
 type ModuleVersion struct {
-	ID             string
-	ModuleID       string
-	Version        string
-	StoragePath    string
-	StorageBackend string
-	SizeBytes      int64
-	Checksum       string
-	Readme         *string
-	PublishedBy    *string
-	DownloadCount  int64
-	CreatedAt      time.Time
+	ID                 string
+	ModuleID           string
+	Version            string
+	StoragePath        string
+	StorageBackend     string
+	SizeBytes          int64
+	Checksum           string
+	Readme             *string
+	PublishedBy        *string
+	DownloadCount      int64
+	Deprecated         bool       // Whether this version is deprecated
+	DeprecatedAt       *time.Time // When the version was deprecated
+	DeprecationMessage *string    // Optional message explaining deprecation
+	CreatedAt          time.Time
 }

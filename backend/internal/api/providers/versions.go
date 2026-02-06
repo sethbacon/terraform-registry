@@ -86,12 +86,21 @@ func ListVersionsHandler(db *sql.DB, cfg *config.Config) gin.HandlerFunc {
 				})
 			}
 
-			versionsList = append(versionsList, gin.H{
+			versionData := gin.H{
+				"id":           v.ID,
 				"version":      v.Version,
 				"protocols":    v.Protocols,
 				"platforms":    platformsList,
 				"published_at": v.CreatedAt.Format(time.RFC3339),
-			})
+				"deprecated":   v.Deprecated,
+			}
+			if v.DeprecatedAt != nil {
+				versionData["deprecated_at"] = v.DeprecatedAt.Format(time.RFC3339)
+			}
+			if v.DeprecationMessage != nil {
+				versionData["deprecation_message"] = *v.DeprecationMessage
+			}
+			versionsList = append(versionsList, versionData)
 		}
 
 		response := gin.H{

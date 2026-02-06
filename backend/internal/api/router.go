@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"github.com/terraform-registry/terraform-registry/internal/config"
 	"github.com/terraform-registry/terraform-registry/internal/crypto"
 	"github.com/terraform-registry/terraform-registry/internal/db/repositories"
+	"github.com/terraform-registry/terraform-registry/internal/jobs"
 	"github.com/terraform-registry/terraform-registry/internal/middleware"
 	"github.com/terraform-registry/terraform-registry/internal/services"
 	"github.com/terraform-registry/terraform-registry/internal/storage"
@@ -41,10 +43,19 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	userRepo := repositories.NewUserRepository(db)
 	apiKeyRepo := repositories.NewAPIKeyRepository(db)
 	moduleRepo := repositories.NewModuleRepository(db)
+	providerRepo := repositories.NewProviderRepository(db)
+	auditRepo := repositories.NewAuditRepository(db)
 
-	// Wrap *sql.DB with sqlx for SCM repository
+	// Wrap *sql.DB with sqlx for SCM and mirror repositories
 	sqlxDB := sqlx.NewDb(db, "postgres")
 	scmRepo := repositories.NewSCMRepository(sqlxDB)
+	mirrorRepo := repositories.NewMirrorRepository(sqlxDB)
+
+	// Initialize mirror sync job
+	mirrorSyncJob := jobs.NewMirrorSyncJob(mirrorRepo, providerRepo, storageBackend)
+	// Start background sync job - check every 10 minutes for mirrors that need syncing
+	mirrorSyncJob.Start(context.Background(), 10)
+	log.Println("Mirror sync job started (checking every 10 minutes)")
 
 	// Get encryption key from environment for OAuth token encryption
 	encryptionKey := os.Getenv("ENCRYPTION_KEY")
@@ -114,6 +125,11 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	apiKeyHandlers := admin.NewAPIKeyHandlers(cfg, db)
 	userHandlers := admin.NewUserHandlers(cfg, db)
 	orgHandlers := admin.NewOrganizationHandlers(cfg, db)
+	statsHandlers := admin.NewStatsHandler(sqlxDB)
+	mirrorHandlers := admin.NewMirrorHandler(mirrorRepo)
+	mirrorHandlers.SetSyncJob(mirrorSyncJob) // Connect sync job for manual triggers
+	providerAdminHandlers := admin.NewProviderAdminHandlers(db, storageBackend, cfg)
+	moduleAdminHandlers := admin.NewModuleAdminHandlers(db, storageBackend, cfg)
 
 	// Initialize SCM handlers with the already-created repositories and token cipher
 	scmProviderHandlers := admin.NewSCMProviderHandlers(cfg, scmRepo, tokenCipher)
@@ -137,10 +153,14 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 		// Authenticated-only endpoints
 		authenticatedGroup := apiV1.Group("")
 		authenticatedGroup.Use(middleware.AuthMiddleware(cfg, userRepo, apiKeyRepo))
+		authenticatedGroup.Use(middleware.AuditMiddleware(auditRepo)) // Audit all authenticated actions
 		{
 			// Auth endpoints (require auth)
 			authenticatedGroup.POST("/auth/refresh", authHandlers.RefreshHandler())
 			authenticatedGroup.GET("/auth/me", authHandlers.MeHandler())
+
+			// Stats endpoints (require auth)
+			authenticatedGroup.GET("/admin/stats/dashboard", statsHandlers.GetDashboardStats)
 
 			// Modules admin endpoints - require write permissions
 			authenticatedGroup.POST("/modules",
@@ -157,6 +177,38 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 			authenticatedGroup.GET("/providers/search",
 				middleware.RequireScope(auth.ScopeProvidersRead),
 				providers.SearchHandler(db, cfg))
+			authenticatedGroup.GET("/providers/:namespace/:type",
+				middleware.RequireScope(auth.ScopeProvidersRead),
+				providerAdminHandlers.GetProvider)
+			authenticatedGroup.DELETE("/providers/:namespace/:type",
+				middleware.RequireScope(auth.ScopeProvidersWrite),
+				providerAdminHandlers.DeleteProvider)
+			authenticatedGroup.DELETE("/providers/:namespace/:type/versions/:version",
+				middleware.RequireScope(auth.ScopeProvidersWrite),
+				providerAdminHandlers.DeleteVersion)
+			authenticatedGroup.POST("/providers/:namespace/:type/versions/:version/deprecate",
+				middleware.RequireScope(auth.ScopeProvidersWrite),
+				providerAdminHandlers.DeprecateVersion)
+			authenticatedGroup.DELETE("/providers/:namespace/:type/versions/:version/deprecate",
+				middleware.RequireScope(auth.ScopeProvidersWrite),
+				providerAdminHandlers.UndeprecateVersion)
+
+			// Modules admin endpoints - get, delete, deprecate
+			authenticatedGroup.GET("/modules/:namespace/:name/:system",
+				middleware.RequireScope(auth.ScopeModulesRead),
+				moduleAdminHandlers.GetModule)
+			authenticatedGroup.DELETE("/modules/:namespace/:name/:system",
+				middleware.RequireScope(auth.ScopeModulesWrite),
+				moduleAdminHandlers.DeleteModule)
+			authenticatedGroup.DELETE("/modules/:namespace/:name/:system/versions/:version",
+				middleware.RequireScope(auth.ScopeModulesWrite),
+				moduleAdminHandlers.DeleteVersion)
+			authenticatedGroup.POST("/modules/:namespace/:name/:system/versions/:version/deprecate",
+				middleware.RequireScope(auth.ScopeModulesWrite),
+				moduleAdminHandlers.DeprecateVersion)
+			authenticatedGroup.DELETE("/modules/:namespace/:name/:system/versions/:version/deprecate",
+				middleware.RequireScope(auth.ScopeModulesWrite),
+				moduleAdminHandlers.UndeprecateVersion)
 
 			// API Keys management
 			apiKeysGroup := authenticatedGroup.Group("/apikeys")
@@ -224,7 +276,7 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 			apiV1.GET("/scm-providers/:id/oauth/callback", scmOAuthHandlers.HandleOAuthCallback)
 
 			// Module SCM linking endpoints
-			moduleSCMGroup := authenticatedGroup.Group("/modules/:id/scm")
+		moduleSCMGroup := authenticatedGroup.Group("/admin/modules/:id/scm")
 			moduleSCMGroup.Use(middleware.RequireScope(auth.ScopeModulesWrite))
 			{
 				moduleSCMGroup.POST("", scmLinkingHandler.LinkModuleToSCM)
@@ -233,6 +285,23 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 				moduleSCMGroup.DELETE("", scmLinkingHandler.UnlinkModuleFromSCM)
 				moduleSCMGroup.POST("/sync", scmLinkingHandler.TriggerManualSync)
 				moduleSCMGroup.GET("/events", scmLinkingHandler.GetWebhookEvents)
+			}
+
+			// Mirror management endpoints with granular RBAC
+			// Read operations require mirrors:read scope
+			// Management operations require mirrors:manage scope
+			mirrorsGroup := authenticatedGroup.Group("/admin/mirrors")
+			{
+				// Read operations - require mirrors:read (or mirrors:manage or admin)
+				mirrorsGroup.GET("", middleware.RequireScope(auth.ScopeMirrorsRead), mirrorHandlers.ListMirrorConfigs)
+				mirrorsGroup.GET("/:id", middleware.RequireScope(auth.ScopeMirrorsRead), mirrorHandlers.GetMirrorConfig)
+				mirrorsGroup.GET("/:id/status", middleware.RequireScope(auth.ScopeMirrorsRead), mirrorHandlers.GetMirrorStatus)
+
+				// Management operations - require mirrors:manage (or admin)
+				mirrorsGroup.POST("", middleware.RequireScope(auth.ScopeMirrorsManage), mirrorHandlers.CreateMirrorConfig)
+				mirrorsGroup.PUT("/:id", middleware.RequireScope(auth.ScopeMirrorsManage), mirrorHandlers.UpdateMirrorConfig)
+				mirrorsGroup.DELETE("/:id", middleware.RequireScope(auth.ScopeMirrorsManage), mirrorHandlers.DeleteMirrorConfig)
+				mirrorsGroup.POST("/:id/sync", middleware.RequireScope(auth.ScopeMirrorsManage), mirrorHandlers.TriggerSync)
 			}
 		}
 	}

@@ -10,13 +10,14 @@ import {
   Alert,
 } from '@mui/material';
 import {
+  ViewModule,
   Extension,
   CloudUpload,
   People,
   Business,
-  VpnKey,
   Download,
   GitHub,
+  Key,
 } from '@mui/icons-material';
 import api from '../../services/api';
 
@@ -33,6 +34,11 @@ const DashboardPage: React.FC = () => {
   const [stats, setStats] = useState<{
     totalModules: number;
     totalProviders: number;
+    manualProviders: number;
+    mirroredProviders: number;
+    totalProviderVersions: number;
+    manualProviderVersions: number;
+    mirroredProviderVersions: number;
     totalUsers: number;
     totalOrganizations: number;
     totalDownloads: number;
@@ -50,45 +56,72 @@ const DashboardPage: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      // Fetch data from multiple endpoints with fallbacks for dev mode
-      const [modulesRes, providersRes, usersRes, orgsRes, scmProvidersRes] = await Promise.all([
-        api.searchModules({ limit: 1 }).catch(() => ({ modules: [], meta: { total: 0 } })),
-        api.searchProviders({ limit: 1 }).catch(() => ({ providers: [], meta: { total: 0 } })),
-        api.searchUsers('', 1, 1).catch(() => ({ users: [], pagination: { total: 0 } })),
-        api.listOrganizations().catch(() => []),
-        api.listSCMProviders().catch(() => []),
-      ]);
+      // Try to use the new stats endpoint first
+      try {
+        const dashboardStats = await api.getDashboardStats();
+        setStats({
+          totalModules: dashboardStats.modules.total || 0,
+          totalProviders: dashboardStats.providers.total || 0,
+          manualProviders: dashboardStats.providers.manual || 0,
+          mirroredProviders: dashboardStats.providers.mirrored || 0,
+          totalProviderVersions: dashboardStats.providers.total_versions || 0,
+          manualProviderVersions: dashboardStats.providers.manual_versions || 0,
+          mirroredProviderVersions: dashboardStats.providers.mirrored_versions || 0,
+          totalUsers: dashboardStats.users || 0,
+          totalOrganizations: dashboardStats.organizations || 0,
+          totalDownloads: dashboardStats.downloads || 0,
+          totalSCMProviders: dashboardStats.scm_providers || 0,
+        });
+      } catch (statsError) {
+        // Fallback to old method if new endpoint doesn't exist yet
+        console.log('Using fallback stats method');
+        const [modulesRes, providersRes, usersRes, orgsRes, scmProvidersRes] = await Promise.all([
+          api.searchModules({ limit: 1 }).catch(() => ({ modules: [], meta: { total: 0 } })),
+          api.searchProviders({ limit: 1 }).catch(() => ({ providers: [], meta: { total: 0 } })),
+          api.searchUsers('', 1, 1).catch(() => ({ users: [], pagination: { total: 0 } })),
+          api.listOrganizations().catch(() => []),
+          api.listSCMProviders().catch(() => []),
+        ]);
 
-      // Calculate total downloads with safety checks
-      const totalModuleDownloads = (modulesRes.modules || []).reduce(
-        (sum: number, m: any) => sum + (m.download_count || 0),
-        0
-      );
-      const totalProviderDownloads = (providersRes.providers || []).reduce(
-        (sum: number, p: any) => sum + (p.download_count || 0),
-        0
-      );
+        const totalModuleDownloads = (modulesRes.modules || []).reduce(
+          (sum: number, m: any) => sum + (m.download_count || 0),
+          0
+        );
+        const totalProviderDownloads = (providersRes.providers || []).reduce(
+          (sum: number, p: any) => sum + (p.download_count || 0),
+          0
+        );
 
-      setStats({
-        totalModules: modulesRes.meta?.total || 0,
-        totalProviders: providersRes.meta?.total || 0,
-        totalUsers: usersRes.pagination?.total || 0,
-        totalOrganizations: orgsRes.length || 0,
-        totalDownloads: totalModuleDownloads + totalProviderDownloads,
-        totalSCMProviders: Array.isArray(scmProvidersRes) ? scmProvidersRes.length : 0,
-      });
+        setStats({
+          totalModules: modulesRes.meta?.total || 0,
+          totalProviders: providersRes.meta?.total || 0,
+          manualProviders: providersRes.meta?.total || 0,
+          mirroredProviders: 0,
+          totalProviderVersions: 0,
+          manualProviderVersions: 0,
+          mirroredProviderVersions: 0,
+          totalUsers: usersRes.pagination?.total || 0,
+          totalOrganizations: orgsRes.length || 0,
+          totalDownloads: totalModuleDownloads + totalProviderDownloads,
+          totalSCMProviders: Array.isArray(scmProvidersRes) ? scmProvidersRes.length : 0,
+        });
+      }
     } catch (err) {
       console.error('Failed to load dashboard stats:', err);
       // In dev mode, just show zeros instead of error
       setStats({
         totalModules: 0,
         totalProviders: 0,
+        manualProviders: 0,
+        mirroredProviders: 0,
+        totalProviderVersions: 0,
+        manualProviderVersions: 0,
+        mirroredProviderVersions: 0,
         totalUsers: 0,
         totalOrganizations: 0,
         totalDownloads: 0,
         totalSCMProviders: 0,
       });
-      // Silently fail in development mode
     } finally {
       setLoading(false);
     }
@@ -122,14 +155,14 @@ const DashboardPage: React.FC = () => {
     {
       title: 'Total Modules',
       value: stats.totalModules,
-      icon: <Extension sx={{ fontSize: 40 }} />,
+      icon: <ViewModule sx={{ fontSize: 40 }} />,
       color: '#5C4EE5',
       route: '/modules',
     },
     {
       title: 'Total Providers',
       value: stats.totalProviders,
-      icon: <CloudUpload sx={{ fontSize: 40 }} />,
+      icon: <Extension sx={{ fontSize: 40 }} />,
       color: '#00D9C0',
       route: '/providers',
     },
@@ -199,6 +232,15 @@ const DashboardPage: React.FC = () => {
                 <Typography variant="body2" color="text.secondary">
                   {stat.title}
                 </Typography>
+                {/* Show breakdown for providers */}
+                {stat.title === 'Total Providers' && (
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                    {stats.manualProviders} manual, {stats.mirroredProviders} mirrored
+                    {stats.totalProviderVersions > 0 && (
+                      <><br />{stats.totalProviderVersions} versions ({stats.manualProviderVersions} manual, {stats.mirroredProviderVersions} mirrored)</>
+                    )}
+                  </Typography>
+                )}
               </Box>
             </Paper>
           </Grid>
@@ -223,7 +265,7 @@ const DashboardPage: React.FC = () => {
               },
             }}
           >
-            <Extension sx={{ fontSize: 40, color: '#5C4EE5', mb: 2 }} />
+            <CloudUpload sx={{ fontSize: 40, color: '#5C4EE5', mb: 2 }} />
             <Typography variant="h6" gutterBottom>
               Upload Module
             </Typography>
@@ -289,7 +331,7 @@ const DashboardPage: React.FC = () => {
               },
             }}
           >
-            <VpnKey sx={{ fontSize: 40, color: '#FFB74D', mb: 2 }} />
+            <Key sx={{ fontSize: 40, color: '#FFB74D', mb: 2 }} />
             <Typography variant="h6" gutterBottom>
               API Keys
             </Typography>

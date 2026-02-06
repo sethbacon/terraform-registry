@@ -31,6 +31,7 @@ import {
   CloudUpload,
   Home,
   GitHub,
+  CloudDownload,
 } from '@mui/icons-material';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -73,11 +74,11 @@ const Layout = () => {
   const adminItems = isAuthenticated
     ? [
         { text: 'Dashboard', icon: <Dashboard />, path: '/admin' },
-        { text: 'Upload', icon: <CloudUpload />, path: '/admin/upload' },
-        { text: 'Users', icon: <People />, path: '/admin/users' },
         { text: 'Organizations', icon: <Business />, path: '/admin/organizations' },
+        { text: 'Users', icon: <People />, path: '/admin/users' },
         { text: 'API Keys', icon: <Key />, path: '/admin/apikeys' },
         { text: 'SCM Providers', icon: <GitHub />, path: '/admin/scm-providers' },
+        { text: 'Provider Mirrors', icon: <CloudDownload />, path: '/admin/mirrors' },
       ]
     : [];
 

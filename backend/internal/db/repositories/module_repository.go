@@ -124,7 +124,8 @@ func (r *ModuleRepository) CreateVersion(ctx context.Context, version *models.Mo
 // GetVersion retrieves a specific module version
 func (r *ModuleRepository) GetVersion(ctx context.Context, moduleID, version string) (*models.ModuleVersion, error) {
 	query := `
-		SELECT id, module_id, version, storage_path, storage_backend, size_bytes, checksum, readme, published_by, download_count, created_at
+		SELECT id, module_id, version, storage_path, storage_backend, size_bytes, checksum, readme, published_by, download_count,
+		       COALESCE(deprecated, false), deprecated_at, deprecation_message, created_at
 		FROM module_versions
 		WHERE module_id = $1 AND version = $2
 	`
@@ -141,6 +142,9 @@ func (r *ModuleRepository) GetVersion(ctx context.Context, moduleID, version str
 		&v.Readme,
 		&v.PublishedBy,
 		&v.DownloadCount,
+		&v.Deprecated,
+		&v.DeprecatedAt,
+		&v.DeprecationMessage,
 		&v.CreatedAt,
 	)
 
@@ -157,7 +161,8 @@ func (r *ModuleRepository) GetVersion(ctx context.Context, moduleID, version str
 // ListVersions retrieves all versions for a module, ordered by version DESC
 func (r *ModuleRepository) ListVersions(ctx context.Context, moduleID string) ([]*models.ModuleVersion, error) {
 	query := `
-		SELECT id, module_id, version, storage_path, storage_backend, size_bytes, checksum, readme, published_by, download_count, created_at
+		SELECT id, module_id, version, storage_path, storage_backend, size_bytes, checksum, readme, published_by, download_count,
+		       COALESCE(deprecated, false), deprecated_at, deprecation_message, created_at
 		FROM module_versions
 		WHERE module_id = $1
 		ORDER BY created_at DESC
@@ -183,6 +188,9 @@ func (r *ModuleRepository) ListVersions(ctx context.Context, moduleID string) ([
 			&v.Readme,
 			&v.PublishedBy,
 			&v.DownloadCount,
+			&v.Deprecated,
+			&v.DeprecatedAt,
+			&v.DeprecationMessage,
 			&v.CreatedAt,
 		)
 		if err != nil {
@@ -328,6 +336,56 @@ func (r *ModuleRepository) DeleteVersion(ctx context.Context, versionID string) 
 	result, err := r.db.ExecContext(ctx, query, versionID)
 	if err != nil {
 		return fmt.Errorf("failed to delete module version: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("module version not found")
+	}
+
+	return nil
+}
+
+// DeprecateVersion marks a module version as deprecated
+func (r *ModuleRepository) DeprecateVersion(ctx context.Context, versionID string, message *string) error {
+	query := `
+		UPDATE module_versions
+		SET deprecated = true, deprecated_at = NOW(), deprecation_message = $2
+		WHERE id = $1
+	`
+
+	result, err := r.db.ExecContext(ctx, query, versionID, message)
+	if err != nil {
+		return fmt.Errorf("failed to deprecate module version: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("module version not found")
+	}
+
+	return nil
+}
+
+// UndeprecateVersion removes the deprecated status from a module version
+func (r *ModuleRepository) UndeprecateVersion(ctx context.Context, versionID string) error {
+	query := `
+		UPDATE module_versions
+		SET deprecated = false, deprecated_at = NULL, deprecation_message = NULL
+		WHERE id = $1
+	`
+
+	result, err := r.db.ExecContext(ctx, query, versionID)
+	if err != nil {
+		return fmt.Errorf("failed to undeprecate module version: %w", err)
 	}
 
 	rows, err := result.RowsAffected()

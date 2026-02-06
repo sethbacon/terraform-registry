@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/terraform-registry/terraform-registry/internal/db/models"
 )
@@ -27,8 +30,16 @@ func (r *ProviderRepository) CreateProvider(ctx context.Context, provider *model
 		RETURNING id, created_at, updated_at
 	`
 
+	// Handle empty organization ID (single-tenant mode) by passing nil instead
+	var orgID interface{}
+	if provider.OrganizationID == "" {
+		orgID = nil
+	} else {
+		orgID = provider.OrganizationID
+	}
+
 	err := r.db.QueryRowContext(ctx, query,
-		provider.OrganizationID,
+		orgID,
 		provider.Namespace,
 		provider.Type,
 		provider.Description,
@@ -43,17 +54,21 @@ func (r *ProviderRepository) CreateProvider(ctx context.Context, provider *model
 }
 
 // GetProvider retrieves a provider by organization, namespace, and type
+// In single-tenant mode (or when provider has NULL org_id), also matches providers with NULL organization_id
 func (r *ProviderRepository) GetProvider(ctx context.Context, orgID, namespace, providerType string) (*models.Provider, error) {
+	// Query that matches either the specific org ID or NULL org ID (for mirrored/single-tenant providers)
 	query := `
 		SELECT id, organization_id, namespace, type, description, source, created_at, updated_at
 		FROM providers
-		WHERE organization_id = $1 AND namespace = $2 AND type = $3
+		WHERE (organization_id = $1 OR organization_id IS NULL) AND namespace = $2 AND type = $3
+		LIMIT 1
 	`
 
 	provider := &models.Provider{}
+	var scannedOrgID sql.NullString
 	err := r.db.QueryRowContext(ctx, query, orgID, namespace, providerType).Scan(
 		&provider.ID,
-		&provider.OrganizationID,
+		&scannedOrgID,
 		&provider.Namespace,
 		&provider.Type,
 		&provider.Description,
@@ -67,6 +82,61 @@ func (r *ProviderRepository) GetProvider(ctx context.Context, orgID, namespace, 
 			return nil, nil // Not found
 		}
 		return nil, fmt.Errorf("failed to get provider: %w", err)
+	}
+
+	if scannedOrgID.Valid {
+		provider.OrganizationID = scannedOrgID.String
+	}
+
+	return provider, nil
+}
+
+// GetProviderByNamespaceType retrieves a provider by namespace and type only (for single-tenant mode)
+// If orgID is provided and not empty, it filters by organization as well
+func (r *ProviderRepository) GetProviderByNamespaceType(ctx context.Context, orgID, namespace, providerType string) (*models.Provider, error) {
+	var query string
+	var args []interface{}
+
+	if orgID != "" {
+		query = `
+			SELECT id, organization_id, namespace, type, description, source, created_at, updated_at
+			FROM providers
+			WHERE organization_id = $1 AND namespace = $2 AND type = $3
+		`
+		args = []interface{}{orgID, namespace, providerType}
+	} else {
+		// Single-tenant mode: find by namespace and type only
+		query = `
+			SELECT id, organization_id, namespace, type, description, source, created_at, updated_at
+			FROM providers
+			WHERE namespace = $1 AND type = $2
+			LIMIT 1
+		`
+		args = []interface{}{namespace, providerType}
+	}
+
+	provider := &models.Provider{}
+	var scannedOrgID sql.NullString
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(
+		&provider.ID,
+		&scannedOrgID,
+		&provider.Namespace,
+		&provider.Type,
+		&provider.Description,
+		&provider.Source,
+		&provider.CreatedAt,
+		&provider.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // Not found
+		}
+		return nil, fmt.Errorf("failed to get provider: %w", err)
+	}
+
+	if scannedOrgID.Valid {
+		provider.OrganizationID = scannedOrgID.String
 	}
 
 	return provider, nil
@@ -149,7 +219,8 @@ func (r *ProviderRepository) CreateVersion(ctx context.Context, version *models.
 // GetVersion retrieves a specific provider version
 func (r *ProviderRepository) GetVersion(ctx context.Context, providerID, version string) (*models.ProviderVersion, error) {
 	query := `
-		SELECT id, provider_id, version, protocols, gpg_public_key, shasums_url, shasums_signature_url, published_by, created_at
+		SELECT id, provider_id, version, protocols, gpg_public_key, shasums_url, shasums_signature_url, published_by,
+		       COALESCE(deprecated, false), deprecated_at, deprecation_message, created_at
 		FROM provider_versions
 		WHERE provider_id = $1 AND version = $2
 	`
@@ -166,6 +237,9 @@ func (r *ProviderRepository) GetVersion(ctx context.Context, providerID, version
 		&v.ShasumURL,
 		&v.ShasumSignatureURL,
 		&v.PublishedBy,
+		&v.Deprecated,
+		&v.DeprecatedAt,
+		&v.DeprecationMessage,
 		&v.CreatedAt,
 	)
 
@@ -184,13 +258,13 @@ func (r *ProviderRepository) GetVersion(ctx context.Context, providerID, version
 	return v, nil
 }
 
-// ListVersions retrieves all versions for a provider, ordered by created_at DESC
+// ListVersions retrieves all versions for a provider, sorted by semver (highest first)
 func (r *ProviderRepository) ListVersions(ctx context.Context, providerID string) ([]*models.ProviderVersion, error) {
 	query := `
-		SELECT id, provider_id, version, protocols, gpg_public_key, shasums_url, shasums_signature_url, published_by, created_at
+		SELECT id, provider_id, version, protocols, gpg_public_key, shasums_url, shasums_signature_url, published_by,
+		       COALESCE(deprecated, false), deprecated_at, deprecation_message, created_at
 		FROM provider_versions
 		WHERE provider_id = $1
-		ORDER BY created_at DESC
 	`
 
 	rows, err := r.db.QueryContext(ctx, query, providerID)
@@ -213,6 +287,9 @@ func (r *ProviderRepository) ListVersions(ctx context.Context, providerID string
 			&v.ShasumURL,
 			&v.ShasumSignatureURL,
 			&v.PublishedBy,
+			&v.Deprecated,
+			&v.DeprecatedAt,
+			&v.DeprecationMessage,
 			&v.CreatedAt,
 		)
 		if err != nil {
@@ -231,6 +308,11 @@ func (r *ProviderRepository) ListVersions(ctx context.Context, providerID string
 		return nil, fmt.Errorf("error iterating provider versions: %w", err)
 	}
 
+	// Sort by semver (highest first)
+	sort.Slice(versions, func(i, j int) bool {
+		return compareSemver(versions[i].Version, versions[j].Version) > 0
+	})
+
 	return versions, nil
 }
 
@@ -241,6 +323,56 @@ func (r *ProviderRepository) DeleteVersion(ctx context.Context, versionID string
 	result, err := r.db.ExecContext(ctx, query, versionID)
 	if err != nil {
 		return fmt.Errorf("failed to delete provider version: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("provider version not found")
+	}
+
+	return nil
+}
+
+// DeprecateVersion marks a provider version as deprecated
+func (r *ProviderRepository) DeprecateVersion(ctx context.Context, versionID string, message *string) error {
+	query := `
+		UPDATE provider_versions
+		SET deprecated = true, deprecated_at = NOW(), deprecation_message = $2
+		WHERE id = $1
+	`
+
+	result, err := r.db.ExecContext(ctx, query, versionID, message)
+	if err != nil {
+		return fmt.Errorf("failed to deprecate provider version: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("provider version not found")
+	}
+
+	return nil
+}
+
+// UndeprecateVersion removes the deprecated status from a provider version
+func (r *ProviderRepository) UndeprecateVersion(ctx context.Context, versionID string) error {
+	query := `
+		UPDATE provider_versions
+		SET deprecated = false, deprecated_at = NULL, deprecation_message = NULL
+		WHERE id = $1
+	`
+
+	result, err := r.db.ExecContext(ctx, query, versionID)
+	if err != nil {
+		return fmt.Errorf("failed to undeprecate provider version: %w", err)
 	}
 
 	rows, err := result.RowsAffected()
@@ -449,9 +581,10 @@ func (r *ProviderRepository) SearchProviders(ctx context.Context, orgID, query, 
 	var providers []*models.Provider
 	for rows.Next() {
 		p := &models.Provider{}
+		var orgID sql.NullString
 		err := rows.Scan(
 			&p.ID,
-			&p.OrganizationID,
+			&orgID,
 			&p.Namespace,
 			&p.Type,
 			&p.Description,
@@ -462,6 +595,9 @@ func (r *ProviderRepository) SearchProviders(ctx context.Context, orgID, query, 
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to scan provider: %w", err)
 		}
+		if orgID.Valid {
+			p.OrganizationID = orgID.String
+		}
 		providers = append(providers, p)
 	}
 
@@ -470,4 +606,40 @@ func (r *ProviderRepository) SearchProviders(ctx context.Context, orgID, query, 
 	}
 
 	return providers, total, nil
+}
+
+// compareSemver compares two semver strings
+// Returns: -1 if a < b, 0 if a == b, 1 if a > b
+func compareSemver(a, b string) int {
+	aParts := parseSemverParts(a)
+	bParts := parseSemverParts(b)
+
+	for i := 0; i < 3; i++ {
+		if aParts[i] < bParts[i] {
+			return -1
+		}
+		if aParts[i] > bParts[i] {
+			return 1
+		}
+	}
+	return 0
+}
+
+// parseSemverParts extracts major, minor, patch from a version string
+func parseSemverParts(version string) [3]int {
+	// Remove leading 'v' if present
+	version = strings.TrimPrefix(version, "v")
+
+	// Remove any pre-release suffix (e.g., -alpha, -beta)
+	if idx := strings.Index(version, "-"); idx != -1 {
+		version = version[:idx]
+	}
+
+	parts := strings.Split(version, ".")
+	var result [3]int
+	for i := 0; i < 3 && i < len(parts); i++ {
+		val, _ := strconv.Atoi(parts[i])
+		result[i] = val
+	}
+	return result
 }

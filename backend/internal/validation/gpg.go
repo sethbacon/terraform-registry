@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/armor"
 )
 
 // ParseGPGPublicKey validates that the provided string is a valid GPG public key in ASCII-armored format
@@ -21,19 +24,21 @@ func ParseGPGPublicKey(keyArmored string) error {
 		return fmt.Errorf("invalid GPG public key: missing END marker")
 	}
 
-	// Basic validation - actual parsing would require openpgp library
-	// For now, we just ensure the format looks correct
-	// TODO: Use github.com/ProtonMail/go-crypto/openpgp for full validation in production
+	// Try to actually parse the key to validate it
+	keyReader := strings.NewReader(keyArmored)
+	_, err := openpgp.ReadArmoredKeyRing(keyReader)
+	if err != nil {
+		return fmt.Errorf("failed to parse GPG public key: %w", err)
+	}
 
 	return nil
 }
 
 // VerifySignature verifies a GPG signature against data using the provided public key
-// This is a placeholder implementation - full implementation requires openpgp library
 func VerifySignature(publicKeyArmored string, data []byte, signature []byte) error {
 	// Validate the public key format first
-	if err := ParseGPGPublicKey(publicKeyArmored); err != nil {
-		return fmt.Errorf("invalid public key: %w", err)
+	if publicKeyArmored == "" {
+		return fmt.Errorf("public key cannot be empty")
 	}
 
 	if len(data) == 0 {
@@ -44,18 +49,47 @@ func VerifySignature(publicKeyArmored string, data []byte, signature []byte) err
 		return fmt.Errorf("signature cannot be empty")
 	}
 
-	// TODO: Implement actual GPG signature verification using:
-	// github.com/ProtonMail/go-crypto/openpgp
-	//
-	// Example implementation:
-	// 1. Parse the public key from ASCII armor
-	// 2. Create an entity list from the key
-	// 3. Verify the signature against the data
-	//
-	// For Phase 3 initial implementation, we'll accept the signature
-	// and add full verification in a follow-up task
+	// Parse the public key
+	keyReader := strings.NewReader(publicKeyArmored)
+	keyring, err := openpgp.ReadArmoredKeyRing(keyReader)
+	if err != nil {
+		return fmt.Errorf("failed to parse public key: %w", err)
+	}
+
+	// Check if signature is ASCII-armored
+	sigReader := bytes.NewReader(signature)
+	var decodedSig []byte
+
+	// Try to decode as ASCII armor first
+	block, err := armor.Decode(sigReader)
+	if err != nil {
+		// Not armored, use raw bytes
+		decodedSig = signature
+	} else {
+		// Read the decoded signature
+		buf := new(bytes.Buffer)
+		_, err := buf.ReadFrom(block.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read armored signature: %w", err)
+		}
+		decodedSig = buf.Bytes()
+	}
+
+	// Verify the signature
+	dataReader := bytes.NewReader(data)
+	sigReadCloser := bytes.NewReader(decodedSig)
+
+	_, err = openpgp.CheckDetachedSignature(keyring, dataReader, sigReadCloser, nil)
+	if err != nil {
+		return fmt.Errorf("signature verification failed: %w", err)
+	}
 
 	return nil
+}
+
+// VerifyArmoredSignature verifies an ASCII-armored GPG signature against data
+func VerifyArmoredSignature(publicKeyArmored string, data []byte, armoredSignature string) error {
+	return VerifySignature(publicKeyArmored, data, []byte(armoredSignature))
 }
 
 // VerifyShasumSignature verifies the GPG signature of a SHA256SUMS file
@@ -175,4 +209,59 @@ func ValidateProviderBinary(data []byte, maxSize int64) error {
 	}
 
 	return nil
+}
+
+// GPGVerificationResult contains the result of a GPG verification operation
+type GPGVerificationResult struct {
+	Verified       bool
+	KeyID          string
+	KeyFingerprint string
+	Error          error
+}
+
+// VerifyProviderSignature verifies a provider's SHASUM signature and returns detailed results
+func VerifyProviderSignature(shasumsContent []byte, signatureContent []byte, publicKeys []string) *GPGVerificationResult {
+	result := &GPGVerificationResult{
+		Verified: false,
+	}
+
+	if len(shasumsContent) == 0 {
+		result.Error = fmt.Errorf("SHASUM content is empty")
+		return result
+	}
+
+	if len(signatureContent) == 0 {
+		result.Error = fmt.Errorf("signature content is empty")
+		return result
+	}
+
+	if len(publicKeys) == 0 {
+		result.Error = fmt.Errorf("no public keys provided")
+		return result
+	}
+
+	// Try each public key until one verifies
+	var lastErr error
+	for _, key := range publicKeys {
+		if key == "" {
+			continue
+		}
+
+		err := VerifySignature(key, shasumsContent, signatureContent)
+		if err == nil {
+			result.Verified = true
+			// Try to extract key ID
+			keyReader := strings.NewReader(key)
+			keyring, err := openpgp.ReadArmoredKeyRing(keyReader)
+			if err == nil && len(keyring) > 0 {
+				result.KeyID = fmt.Sprintf("%X", keyring[0].PrimaryKey.KeyId)
+				result.KeyFingerprint = fmt.Sprintf("%X", keyring[0].PrimaryKey.Fingerprint)
+			}
+			return result
+		}
+		lastErr = err
+	}
+
+	result.Error = fmt.Errorf("signature verification failed with all provided keys: %v", lastErr)
+	return result
 }

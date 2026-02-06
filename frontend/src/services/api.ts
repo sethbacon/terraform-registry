@@ -121,6 +121,34 @@ class ApiClient {
     return response.data;
   }
 
+  async getModule(namespace: string, name: string, system: string) {
+    const response = await this.client.get(`/api/v1/modules/${namespace}/${name}/${system}`);
+    return response.data;
+  }
+
+  async deleteModule(namespace: string, name: string, system: string) {
+    const response = await this.client.delete(`/api/v1/modules/${namespace}/${name}/${system}`);
+    return response.data;
+  }
+
+  async deleteModuleVersion(namespace: string, name: string, system: string, version: string) {
+    const response = await this.client.delete(`/api/v1/modules/${namespace}/${name}/${system}/versions/${version}`);
+    return response.data;
+  }
+
+  async deprecateModuleVersion(namespace: string, name: string, system: string, version: string, message?: string) {
+    const response = await this.client.post(
+      `/api/v1/modules/${namespace}/${name}/${system}/versions/${version}/deprecate`,
+      message ? { message } : {}
+    );
+    return response.data;
+  }
+
+  async undeprecateModuleVersion(namespace: string, name: string, system: string, version: string) {
+    const response = await this.client.delete(`/api/v1/modules/${namespace}/${name}/${system}/versions/${version}/deprecate`);
+    return response.data;
+  }
+
   // Providers
   async searchProviders(options?: { query?: string; limit?: number; offset?: number; page?: number; per_page?: number }) {
     const params: any = {};
@@ -148,6 +176,34 @@ class ApiClient {
         'Content-Type': 'multipart/form-data',
       },
     });
+    return response.data;
+  }
+
+  async getProvider(namespace: string, type: string) {
+    const response = await this.client.get(`/api/v1/providers/${namespace}/${type}`);
+    return response.data;
+  }
+
+  async deleteProvider(namespace: string, type: string) {
+    const response = await this.client.delete(`/api/v1/providers/${namespace}/${type}`);
+    return response.data;
+  }
+
+  async deleteProviderVersion(namespace: string, type: string, version: string) {
+    const response = await this.client.delete(`/api/v1/providers/${namespace}/${type}/versions/${version}`);
+    return response.data;
+  }
+
+  async deprecateProviderVersion(namespace: string, type: string, version: string, message?: string) {
+    const response = await this.client.post(
+      `/api/v1/providers/${namespace}/${type}/versions/${version}/deprecate`,
+      message ? { message } : {}
+    );
+    return response.data;
+  }
+
+  async undeprecateProviderVersion(namespace: string, type: string, version: string) {
+    const response = await this.client.delete(`/api/v1/providers/${namespace}/${type}/versions/${version}/deprecate`);
     return response.data;
   }
 
@@ -401,12 +457,12 @@ class ApiClient {
       tag_pattern?: string;
     }
   ) {
-    const response = await this.client.post(`/api/v1/modules/${moduleId}/scm`, data);
+    const response = await this.client.post(`/api/v1/admin/modules/${moduleId}/scm`, data);
     return response.data;
   }
 
   async getModuleSCMInfo(moduleId: string) {
-    const response = await this.client.get(`/api/v1/modules/${moduleId}/scm`);
+    const response = await this.client.get(`/api/v1/admin/modules/${moduleId}/scm`);
     return response.data;
   }
 
@@ -419,22 +475,86 @@ class ApiClient {
       tag_pattern?: string;
     }
   ) {
-    const response = await this.client.put(`/api/v1/modules/${moduleId}/scm`, data);
+    const response = await this.client.put(`/api/v1/admin/modules/${moduleId}/scm`, data);
     return response.data;
   }
 
   async unlinkModuleFromSCM(moduleId: string) {
-    const response = await this.client.delete(`/api/v1/modules/${moduleId}/scm`);
+    const response = await this.client.delete(`/api/v1/admin/modules/${moduleId}/scm`);
     return response.data;
   }
 
   async triggerManualSync(moduleId: string, data?: { tag_name?: string; commit_sha?: string }) {
-    const response = await this.client.post(`/api/v1/modules/${moduleId}/scm/sync`, data || {});
+    const response = await this.client.post(`/api/v1/admin/modules/${moduleId}/scm/sync`, data || {});
     return response.data;
   }
 
   async getWebhookEvents(moduleId: string) {
-    const response = await this.client.get(`/api/v1/modules/${moduleId}/scm/events`);
+    const response = await this.client.get(`/api/v1/admin/modules/${moduleId}/scm/events`);
+    return response.data;
+  }
+
+  // Dashboard Stats
+  async getDashboardStats() {
+    const response = await this.client.get('/api/v1/admin/stats/dashboard');
+    return response.data;
+  }
+
+  // Mirror Management
+  async listMirrors(enabledOnly = false) {
+    const params = enabledOnly ? { enabled: 'true' } : {};
+    const response = await this.client.get('/api/v1/admin/mirrors', { params });
+    return response.data.mirrors || [];
+  }
+
+  async getMirror(id: string) {
+    const response = await this.client.get(`/api/v1/admin/mirrors/${id}`);
+    return response.data;
+  }
+
+  async createMirror(data: {
+    name: string;
+    description?: string;
+    upstream_registry_url: string;
+    organization_id?: string;
+    namespace_filter?: string[];
+    provider_filter?: string[];
+    enabled?: boolean;
+    sync_interval_hours?: number;
+  }) {
+    const response = await this.client.post('/api/v1/admin/mirrors', data);
+    return response.data;
+  }
+
+  async updateMirror(
+    id: string,
+    data: {
+      name?: string;
+      description?: string;
+      upstream_registry_url?: string;
+      organization_id?: string;
+      namespace_filter?: string[];
+      provider_filter?: string[];
+      enabled?: boolean;
+      sync_interval_hours?: number;
+    }
+  ) {
+    const response = await this.client.put(`/api/v1/admin/mirrors/${id}`, data);
+    return response.data;
+  }
+
+  async deleteMirror(id: string) {
+    const response = await this.client.delete(`/api/v1/admin/mirrors/${id}`);
+    return response.data;
+  }
+
+  async triggerMirrorSync(id: string, data?: { namespace?: string; provider_name?: string }) {
+    const response = await this.client.post(`/api/v1/admin/mirrors/${id}/sync`, data || {});
+    return response.data;
+  }
+
+  async getMirrorStatus(id: string) {
+    const response = await this.client.get(`/api/v1/admin/mirrors/${id}/status`);
     return response.data;
   }
 }

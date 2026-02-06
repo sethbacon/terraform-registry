@@ -54,6 +54,20 @@ func AuditMiddleware(auditRepo *repositories.AuditRepository) gin.HandlerFunc {
 		if contains(c.Request.URL.Path, "/modules") {
 			resourceType := "module"
 			auditLog.ResourceType = &resourceType
+		} else if contains(c.Request.URL.Path, "/mirrors") {
+			resourceType := "mirror"
+			auditLog.ResourceType = &resourceType
+			// Add specific mirror action details
+			if contains(c.Request.URL.Path, "/sync") {
+				action = "mirror.sync_triggered"
+			} else if c.Request.Method == "POST" {
+				action = "mirror.created"
+			} else if c.Request.Method == "PUT" {
+				action = "mirror.updated"
+			} else if c.Request.Method == "DELETE" {
+				action = "mirror.deleted"
+			}
+			auditLog.Action = action
 		} else if contains(c.Request.URL.Path, "/providers") {
 			resourceType := "provider"
 			auditLog.ResourceType = &resourceType

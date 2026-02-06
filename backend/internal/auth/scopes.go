@@ -17,6 +17,10 @@ const (
 	ScopeProvidersRead  Scope = "providers:read"
 	ScopeProvidersWrite Scope = "providers:write"
 
+	// Mirror scopes (for provider network mirroring)
+	ScopeMirrorsRead   Scope = "mirrors:read"   // View mirror configurations and sync status
+	ScopeMirrorsManage Scope = "mirrors:manage" // Create, update, delete mirrors and trigger syncs
+
 	// User management scopes
 	ScopeUsersRead  Scope = "users:read"
 	ScopeUsersWrite Scope = "users:write"
@@ -38,6 +42,8 @@ func AllScopes() []Scope {
 		ScopeModulesWrite,
 		ScopeProvidersRead,
 		ScopeProvidersWrite,
+		ScopeMirrorsRead,
+		ScopeMirrorsManage,
 		ScopeUsersRead,
 		ScopeUsersWrite,
 		ScopeAPIKeysManage,
@@ -85,7 +91,7 @@ func HasScope(userScopes []string, required Scope) bool {
 		}
 
 		// Check for wildcard read permissions
-		// If user has write permission, they also have read permission
+		// If user has write/manage permission, they also have read permission
 		if required == ScopeModulesRead && scope == string(ScopeModulesWrite) {
 			return true
 		}
@@ -93,6 +99,9 @@ func HasScope(userScopes []string, required Scope) bool {
 			return true
 		}
 		if required == ScopeUsersRead && scope == string(ScopeUsersWrite) {
+			return true
+		}
+		if required == ScopeMirrorsRead && scope == string(ScopeMirrorsManage) {
 			return true
 		}
 	}

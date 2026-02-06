@@ -31,6 +31,24 @@ A fully-featured, enterprise-grade Terraform registry implementing all three Has
 - **Organization Membership** - Role-based team collaboration (owner, admin, member, viewer)
 - **Configurable Modes** - Single-tenant or multi-tenant deployment
 
+#### SCM Integration
+
+- **GitHub Integration** - Connect modules to GitHub repositories with OAuth
+- **Azure DevOps Integration** - Native support for Azure Repos
+- **GitLab Integration** - Full GitLab repository support
+- **Webhook Support** - Automatic publishing on repository events
+- **Immutable Publishing** - Version control integration for module releases
+
+#### Provider Mirroring
+
+- **Upstream Registry Client** - Mirror providers from registry.terraform.io
+- **Automated Sync** - Scheduled synchronization of provider versions
+- **Configurable Filters** - Namespace and provider-specific mirroring
+- **Sync History** - Track mirror operations and status
+- **Manual Triggers** - On-demand synchronization
+- ⏳ GPG Signature Verification (planned - Session 15/16)
+- ⏳ Enhanced RBAC for mirrors (planned - Session 15)
+
 #### Storage Backends
 
 - **Local Filesystem** - Direct file serving for development and simple deployments

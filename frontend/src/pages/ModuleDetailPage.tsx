@@ -20,12 +20,20 @@ import {
   Select,
   MenuItem,
   FormControl,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  TextField,
 } from '@mui/material';
 import {
   ArrowBack,
-  Download,
   ContentCopy,
   Add,
+  Delete,
+  Warning,
+  Restore,
 } from '@mui/icons-material';
 import api from '../services/api';
 import { Module, ModuleVersion } from '../types';
@@ -46,6 +54,13 @@ const ModuleDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copiedSource, setCopiedSource] = useState(false);
+  const [deleteModuleDialogOpen, setDeleteModuleDialogOpen] = useState(false);
+  const [deleteVersionDialogOpen, setDeleteVersionDialogOpen] = useState(false);
+  const [versionToDelete, setVersionToDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deprecateDialogOpen, setDeprecateDialogOpen] = useState(false);
+  const [deprecationMessage, setDeprecationMessage] = useState('');
+  const [deprecating, setDeprecating] = useState(false);
 
   useEffect(() => {
     loadModuleDetails();
@@ -69,11 +84,11 @@ const ModuleDetailPage: React.FC = () => {
       }
 
       setModule(moduleData.modules[0]);
-      
+
       // Backend returns { modules: [{ versions: [...] }] }
       const versions = versionsData.modules?.[0]?.versions || [];
       setVersions(versions);
-      
+
       // Select latest version by default
       if (versions.length > 0) {
         setSelectedVersion(versions[0]);
@@ -88,7 +103,7 @@ const ModuleDetailPage: React.FC = () => {
 
   const handleCopySource = () => {
     if (!module || !selectedVersion) return;
-    
+
     const source = `${namespace}/${name}/${system}`;
     navigator.clipboard.writeText(source);
     setCopiedSource(true);
@@ -108,12 +123,89 @@ const ModuleDetailPage: React.FC = () => {
     });
   };
 
+  const handleDeleteModule = async () => {
+    if (!namespace || !name || !system) return;
+
+    try {
+      setDeleting(true);
+      await api.deleteModule(namespace, name, system);
+      navigate('/modules');
+    } catch (err: any) {
+      console.error('Failed to delete module:', err);
+      const message = err?.response?.data?.error || err?.message || 'Failed to delete module. Please try again.';
+      setError(message);
+    } finally {
+      setDeleting(false);
+      setDeleteModuleDialogOpen(false);
+    }
+  };
+
+  const handleDeleteVersion = async () => {
+    if (!namespace || !name || !system || !versionToDelete) return;
+
+    try {
+      setDeleting(true);
+      await api.deleteModuleVersion(namespace, name, system, versionToDelete);
+      // Reload the module details
+      await loadModuleDetails();
+      setVersionToDelete(null);
+    } catch (err: any) {
+      console.error('Failed to delete version:', err);
+      const message = err?.response?.data?.error || err?.message || 'Failed to delete version. Please try again.';
+      setError(message);
+    } finally {
+      setDeleting(false);
+      setDeleteVersionDialogOpen(false);
+    }
+  };
+
+  const openDeleteVersionDialog = (version: string) => {
+    setVersionToDelete(version);
+    setDeleteVersionDialogOpen(true);
+  };
+
+  const handleDeprecateVersion = async () => {
+    if (!namespace || !name || !system || !selectedVersion) return;
+
+    try {
+      setDeprecating(true);
+      await api.deprecateModuleVersion(namespace, name, system, selectedVersion.version, deprecationMessage || undefined);
+      // Reload the module details
+      await loadModuleDetails();
+      setDeprecationMessage('');
+    } catch (err: any) {
+      console.error('Failed to deprecate version:', err);
+      const message = err?.response?.data?.error || err?.message || 'Failed to deprecate version. Please try again.';
+      setError(message);
+    } finally {
+      setDeprecating(false);
+      setDeprecateDialogOpen(false);
+    }
+  };
+
+  const handleUndeprecateVersion = async () => {
+    if (!namespace || !name || !system || !selectedVersion) return;
+
+    try {
+      setDeprecating(true);
+      await api.undeprecateModuleVersion(namespace, name, system, selectedVersion.version);
+      // Reload the module details
+      await loadModuleDetails();
+    } catch (err: any) {
+      console.error('Failed to remove deprecation:', err);
+      const message = err?.response?.data?.error || err?.message || 'Failed to remove deprecation. Please try again.';
+      setError(message);
+    } finally {
+      setDeprecating(false);
+    }
+  };
+
   const getTerraformExample = () => {
     if (!module || !selectedVersion) return '';
 
     return `module "${name}" {
   source  = "${window.location.origin}/v1/modules/${namespace}/${name}/${system}/${selectedVersion.version}"
-  
+
   # Add your module variables here
 }`;
   };
@@ -185,9 +277,9 @@ const ModuleDetailPage: React.FC = () => {
         <Typography variant="body1" color="text.secondary" gutterBottom>
           {module.description || 'No description available'}
         </Typography>
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2 }}>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2 }} flexWrap="wrap">
           <Chip label={`${namespace}/${system}`} />
-          <FormControl size="small" sx={{ minWidth: 150 }}>
+          <FormControl size="small" sx={{ minWidth: 220 }}>
             <Select
               value={selectedVersion?.version || ''}
               onChange={(e) => {
@@ -196,14 +288,39 @@ const ModuleDetailPage: React.FC = () => {
               }}
               displayEmpty
             >
-              {versions.map((v) => (
-                <MenuItem key={v.id} value={v.version}>
+              {versions.map((v, index) => (
+                <MenuItem
+                  key={v.id}
+                  value={v.version}
+                  sx={{ color: v.deprecated ? 'text.disabled' : 'inherit' }}
+                >
                   v{v.version}
+                  {index === 0 ? ' (latest)' : ''}
+                  {v.deprecated ? ' [DEPRECATED]' : ''}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
+          {selectedVersion?.deprecated && (
+            <Chip
+              label="Deprecated"
+              color="warning"
+              size="small"
+              icon={<Warning />}
+            />
+          )}
           <Chip label={`${module.download_count} downloads`} />
+          {isAuthenticated && (
+            <Button
+              variant="outlined"
+              color="error"
+              size="small"
+              startIcon={<Delete />}
+              onClick={() => setDeleteModuleDialogOpen(true)}
+            >
+              Delete Module
+            </Button>
+          )}
         </Stack>
       </Box>
 
@@ -318,25 +435,161 @@ const ModuleDetailPage: React.FC = () => {
                 Version {selectedVersion.version} Details
               </Typography>
               <Divider sx={{ mb: 2 }} />
-              <Typography variant="body2" sx={{ mb: 1 }}>
+              <Typography variant="body2" sx={{ mb: 2 }}>
                 <strong>Published:</strong>{' '}
-                {new Date(selectedVersion.published_at).toISOString().split('T')[0]}
+                {selectedVersion.published_at 
+                  ? new Date(selectedVersion.published_at).toISOString().split('T')[0]
+                  : 'N/A'}
               </Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>
+              <Typography variant="body2" sx={{ mb: 2 }}>
                 <strong>Downloads:</strong> {selectedVersion.download_count ?? 0}
               </Typography>
-              {selectedVersion.source_url && (
-                <Typography variant="body2">
-                  <strong>Source:</strong>{' '}
-                  <Link href={selectedVersion.source_url} target="_blank" rel="noopener">
-                    {selectedVersion.source_url}
-                  </Link>
-                </Typography>
+
+              {/* Deprecation Status */}
+              {selectedVersion.deprecated && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Deprecated</strong>
+                    {selectedVersion.deprecated_at && (
+                      <> on {new Date(selectedVersion.deprecated_at).toISOString().split('T')[0]}</>
+                    )}
+                  </Typography>
+                  {selectedVersion.deprecation_message && (
+                    <Typography variant="body2" sx={{ mt: 1 }}>
+                      {selectedVersion.deprecation_message}
+                    </Typography>
+                  )}
+                </Alert>
+              )}
+
+              {isAuthenticated && (
+                <Stack spacing={1}>
+                  {selectedVersion.deprecated ? (
+                    <Button
+                      variant="outlined"
+                      color="success"
+                      size="small"
+                      startIcon={<Restore />}
+                      onClick={handleUndeprecateVersion}
+                      disabled={deprecating}
+                      fullWidth
+                    >
+                      {deprecating ? 'Removing Deprecation...' : 'Remove Deprecation'}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outlined"
+                      color="warning"
+                      size="small"
+                      startIcon={<Warning />}
+                      onClick={() => setDeprecateDialogOpen(true)}
+                      fullWidth
+                    >
+                      Deprecate Version
+                    </Button>
+                  )}
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    size="small"
+                    startIcon={<Delete />}
+                    onClick={() => openDeleteVersionDialog(selectedVersion.version)}
+                    fullWidth
+                  >
+                    Delete This Version
+                  </Button>
+                </Stack>
               )}
             </Paper>
           )}
         </Box>
       </Box>
+
+      {/* Delete Module Confirmation Dialog */}
+      <Dialog
+        open={deleteModuleDialogOpen}
+        onClose={() => setDeleteModuleDialogOpen(false)}
+      >
+        <DialogTitle>Delete Module</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete the module <strong>{namespace}/{name}/{system}</strong>?
+            This will permanently delete all versions and associated files.
+            This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteModuleDialogOpen(false)} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteModule} color="error" disabled={deleting}>
+            {deleting ? 'Deleting...' : 'Delete Module'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Version Confirmation Dialog */}
+      <Dialog
+        open={deleteVersionDialogOpen}
+        onClose={() => setDeleteVersionDialogOpen(false)}
+      >
+        <DialogTitle>Delete Version</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete version <strong>{versionToDelete}</strong> of{' '}
+            <strong>{namespace}/{name}/{system}</strong>?
+            This will permanently delete the version and its associated files.
+            This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteVersionDialogOpen(false)} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteVersion} color="error" disabled={deleting}>
+            {deleting ? 'Deleting...' : 'Delete Version'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Deprecate Version Dialog */}
+      <Dialog
+        open={deprecateDialogOpen}
+        onClose={() => setDeprecateDialogOpen(false)}
+      >
+        <DialogTitle>Deprecate Version</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Are you sure you want to deprecate version <strong>{selectedVersion?.version}</strong> of{' '}
+            <strong>{namespace}/{name}/{system}</strong>?
+            This will mark the version as deprecated, warning users not to use it.
+          </DialogContentText>
+          <TextField
+            autoFocus
+            label="Deprecation Message (optional)"
+            placeholder="e.g., Use version 2.0.0 instead - this version has a critical bug"
+            fullWidth
+            multiline
+            rows={3}
+            value={deprecationMessage}
+            onChange={(e) => setDeprecationMessage(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setDeprecateDialogOpen(false);
+              setDeprecationMessage('');
+            }}
+            disabled={deprecating}
+          >
+            Cancel
+          </Button>
+          <Button onClick={handleDeprecateVersion} color="warning" disabled={deprecating}>
+            {deprecating ? 'Deprecating...' : 'Deprecate Version'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

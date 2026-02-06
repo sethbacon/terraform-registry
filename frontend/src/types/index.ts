@@ -63,6 +63,9 @@ export interface ModuleVersion {
   checksum: string;
   readme?: string;
   download_count: number;
+  deprecated?: boolean;
+  deprecated_at?: string;
+  deprecation_message?: string;
   created_at: string;
 }
 
@@ -104,6 +107,9 @@ export interface ProviderVersion {
   published_at: string;
   download_count?: number;
   platforms?: ProviderPlatform[];
+  deprecated?: boolean;
+  deprecated_at?: string;
+  deprecation_message?: string;
   created_at: string;
 }
 

@@ -42,7 +42,7 @@ type LinkSCMRequest struct {
 }
 
 // LinkModuleToSCM links a module to an SCM repository
-// POST /api/v1/modules/:id/scm
+// POST /api/v1/admin/modules/:id/scm
 func (h *SCMLinkingHandler) LinkModuleToSCM(c *gin.Context) {
 	moduleIDStr := c.Param("id")
 	moduleID, err := uuid.Parse(moduleIDStr)
@@ -67,10 +67,11 @@ func (h *SCMLinkingHandler) LinkModuleToSCM(c *gin.Context) {
 	// This is a placeholder - actual implementation needs GetModuleByID method
 	// module, err := h.moduleRepo.GetByID(c.Request.Context(), moduleID)
 	module := (*models.Module)(nil)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get module"})
-		return
-	}
+	// TODO: Uncomment when GetByID is implemented
+	// if err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get module"})
+	// 	return
+	// }
 	if module == nil {
 		// For now, continue without module validation
 		// c.JSON(http.StatusNotFound, gin.H{"error": "module not found"})
@@ -115,7 +116,7 @@ func (h *SCMLinkingHandler) LinkModuleToSCM(c *gin.Context) {
 
 	// Create module source repo link
 	linkID := uuid.New()
-	repoFullURL := fmt.Sprintf("%s/%s/%s", provider.BaseURL, req.RepositoryOwner, req.RepositoryName)
+	repoFullURL := fmt.Sprintf("%s/%s/%s", *provider.BaseURL, req.RepositoryOwner, req.RepositoryName)
 	webhookCallbackURL := fmt.Sprintf("%s/webhooks/scm/%s/%s", h.publicURL, linkID, webhookSecret)
 
 	link := &scm.ModuleSourceRepoRecord{
@@ -149,7 +150,7 @@ func (h *SCMLinkingHandler) LinkModuleToSCM(c *gin.Context) {
 }
 
 // UpdateSCMLink updates the SCM link configuration
-// PUT /api/v1/modules/:id/scm
+// PUT /api/v1/admin/modules/:id/scm
 func (h *SCMLinkingHandler) UpdateSCMLink(c *gin.Context) {
 	moduleIDStr := c.Param("id")
 	moduleID, err := uuid.Parse(moduleIDStr)
@@ -192,7 +193,7 @@ func (h *SCMLinkingHandler) UpdateSCMLink(c *gin.Context) {
 }
 
 // UnlinkModuleFromSCM removes the SCM repository link
-// DELETE /api/v1/modules/:id/scm
+// DELETE /api/v1/admin/modules/:id/scm
 func (h *SCMLinkingHandler) UnlinkModuleFromSCM(c *gin.Context) {
 	moduleIDStr := c.Param("id")
 	moduleID, err := uuid.Parse(moduleIDStr)
@@ -224,7 +225,7 @@ func (h *SCMLinkingHandler) UnlinkModuleFromSCM(c *gin.Context) {
 }
 
 // GetModuleSCMInfo retrieves the SCM link information for a module
-// GET /api/v1/modules/:id/scm
+// GET /api/v1/admin/modules/:id/scm
 func (h *SCMLinkingHandler) GetModuleSCMInfo(c *gin.Context) {
 	moduleIDStr := c.Param("id")
 	moduleID, err := uuid.Parse(moduleIDStr)
@@ -247,7 +248,7 @@ func (h *SCMLinkingHandler) GetModuleSCMInfo(c *gin.Context) {
 }
 
 // TriggerManualSync manually triggers a repository sync
-// POST /api/v1/modules/:id/scm/sync
+// POST /api/v1/admin/modules/:id/scm/sync
 func (h *SCMLinkingHandler) TriggerManualSync(c *gin.Context) {
 	moduleIDStr := c.Param("id")
 	moduleID, err := uuid.Parse(moduleIDStr)
@@ -272,7 +273,7 @@ func (h *SCMLinkingHandler) TriggerManualSync(c *gin.Context) {
 }
 
 // GetWebhookEvents retrieves webhook event history for a module
-// GET /api/v1/modules/:id/scm/events
+// GET /api/v1/admin/modules/:id/scm/events
 func (h *SCMLinkingHandler) GetWebhookEvents(c *gin.Context) {
 	moduleIDStr := c.Param("id")
 	moduleID, err := uuid.Parse(moduleIDStr)

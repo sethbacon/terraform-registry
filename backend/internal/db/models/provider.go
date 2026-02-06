@@ -19,11 +19,14 @@ type ProviderVersion struct {
 	ID                  string
 	ProviderID          string
 	Version             string
-	Protocols           []string // JSON array of supported Terraform protocol versions (e.g. ["4.0", "5.0"])
-	GPGPublicKey        string   // PEM-encoded GPG public key for signature verification
-	ShasumURL           string   // URL to SHA256SUMS file
-	ShasumSignatureURL  string   // URL to SHA256SUMS.sig file
-	PublishedBy         *string  // User ID who published this version
+	Protocols           []string   // JSON array of supported Terraform protocol versions (e.g. ["4.0", "5.0"])
+	GPGPublicKey        string     // PEM-encoded GPG public key for signature verification
+	ShasumURL           string     // URL to SHA256SUMS file
+	ShasumSignatureURL  string     // URL to SHA256SUMS.sig file
+	PublishedBy         *string    // User ID who published this version
+	Deprecated          bool       // Whether this version is deprecated
+	DeprecatedAt        *time.Time // When the version was deprecated
+	DeprecationMessage  *string    // Optional message explaining deprecation
 	CreatedAt           time.Time
 }
 
