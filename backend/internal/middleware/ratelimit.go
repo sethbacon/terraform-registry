@@ -22,8 +22,8 @@ type RateLimitConfig struct {
 // DefaultRateLimitConfig returns sensible defaults
 func DefaultRateLimitConfig() RateLimitConfig {
 	return RateLimitConfig{
-		RequestsPerMinute: 60,
-		BurstSize:         10,
+		RequestsPerMinute: 200, // Higher limit for authenticated API usage
+		BurstSize:         50,  // Allow burst for pages that load multiple resources
 		CleanupInterval:   5 * time.Minute,
 	}
 }
