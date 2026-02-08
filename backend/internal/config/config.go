@@ -19,6 +19,7 @@ type Config struct {
 	Security      SecurityConfig      `mapstructure:"security"`
 	Logging       LoggingConfig       `mapstructure:"logging"`
 	Telemetry     TelemetryConfig     `mapstructure:"telemetry"`
+	Audit         AuditConfig         `mapstructure:"audit"`
 }
 
 // ServerConfig holds HTTP server configuration
@@ -170,6 +171,56 @@ type TracingConfig struct {
 type ProfilingConfig struct {
 	Enabled bool `mapstructure:"enabled"`
 	Port    int  `mapstructure:"port"`
+}
+
+// AuditConfig holds audit logging configuration
+type AuditConfig struct {
+	// Enabled determines if audit logging is active
+	Enabled bool `mapstructure:"enabled"`
+	// LogReadOperations determines if GET requests should be logged
+	LogReadOperations bool `mapstructure:"log_read_operations"`
+	// LogFailedRequests determines if failed requests (4xx/5xx) should be logged
+	LogFailedRequests bool `mapstructure:"log_failed_requests"`
+	// Shippers configures external log shipping
+	Shippers []AuditShipperConfig `mapstructure:"shippers"`
+}
+
+// AuditShipperConfig holds configuration for a single audit shipper
+type AuditShipperConfig struct {
+	// Enabled determines if this shipper is active
+	Enabled bool `mapstructure:"enabled"`
+	// Type is the shipper type (syslog, webhook, file)
+	Type string `mapstructure:"type"`
+	// Syslog configuration
+	Syslog *AuditSyslogConfig `mapstructure:"syslog"`
+	// Webhook configuration
+	Webhook *AuditWebhookConfig `mapstructure:"webhook"`
+	// File configuration
+	File *AuditFileConfig `mapstructure:"file"`
+}
+
+// AuditSyslogConfig holds syslog shipper configuration
+type AuditSyslogConfig struct {
+	Network  string `mapstructure:"network"`  // udp, tcp, unix
+	Address  string `mapstructure:"address"`  // server address
+	Tag      string `mapstructure:"tag"`      // syslog tag
+	Facility string `mapstructure:"facility"` // syslog facility
+}
+
+// AuditWebhookConfig holds webhook shipper configuration
+type AuditWebhookConfig struct {
+	URL           string            `mapstructure:"url"`
+	Headers       map[string]string `mapstructure:"headers"`
+	TimeoutSecs   int               `mapstructure:"timeout_secs"`
+	BatchSize     int               `mapstructure:"batch_size"`
+	FlushInterval int               `mapstructure:"flush_interval_secs"`
+}
+
+// AuditFileConfig holds file shipper configuration
+type AuditFileConfig struct {
+	Path       string `mapstructure:"path"`
+	MaxSizeMB  int    `mapstructure:"max_size_mb"`
+	MaxBackups int    `mapstructure:"max_backups"`
 }
 
 // bindEnvVars explicitly binds environment variables to config keys

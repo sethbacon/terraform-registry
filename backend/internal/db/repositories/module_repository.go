@@ -21,8 +21,8 @@ func NewModuleRepository(db *sql.DB) *ModuleRepository {
 // CreateModule inserts a new module record
 func (r *ModuleRepository) CreateModule(ctx context.Context, module *models.Module) error {
 	query := `
-		INSERT INTO modules (organization_id, namespace, name, system, description, source)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO modules (organization_id, namespace, name, system, description, source, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, created_at, updated_at
 	`
 
@@ -33,6 +33,7 @@ func (r *ModuleRepository) CreateModule(ctx context.Context, module *models.Modu
 		module.System,
 		module.Description,
 		module.Source,
+		module.CreatedBy,
 	).Scan(&module.ID, &module.CreatedAt, &module.UpdatedAt)
 
 	if err != nil {
@@ -45,9 +46,11 @@ func (r *ModuleRepository) CreateModule(ctx context.Context, module *models.Modu
 // GetModule retrieves a module by organization, namespace, name, and system
 func (r *ModuleRepository) GetModule(ctx context.Context, orgID, namespace, name, system string) (*models.Module, error) {
 	query := `
-		SELECT id, organization_id, namespace, name, system, description, source, created_at, updated_at
-		FROM modules
-		WHERE organization_id = $1 AND namespace = $2 AND name = $3 AND system = $4
+		SELECT m.id, m.organization_id, m.namespace, m.name, m.system, m.description, m.source,
+		       m.created_by, m.created_at, m.updated_at, u.name as created_by_name
+		FROM modules m
+		LEFT JOIN users u ON m.created_by = u.id
+		WHERE m.organization_id = $1 AND m.namespace = $2 AND m.name = $3 AND m.system = $4
 	`
 
 	module := &models.Module{}
@@ -59,8 +62,10 @@ func (r *ModuleRepository) GetModule(ctx context.Context, orgID, namespace, name
 		&module.System,
 		&module.Description,
 		&module.Source,
+		&module.CreatedBy,
 		&module.CreatedAt,
 		&module.UpdatedAt,
+		&module.CreatedByName,
 	)
 
 	if err != nil {
@@ -161,11 +166,13 @@ func (r *ModuleRepository) GetVersion(ctx context.Context, moduleID, version str
 // ListVersions retrieves all versions for a module, ordered by version DESC
 func (r *ModuleRepository) ListVersions(ctx context.Context, moduleID string) ([]*models.ModuleVersion, error) {
 	query := `
-		SELECT id, module_id, version, storage_path, storage_backend, size_bytes, checksum, readme, published_by, download_count,
-		       COALESCE(deprecated, false), deprecated_at, deprecation_message, created_at
-		FROM module_versions
-		WHERE module_id = $1
-		ORDER BY created_at DESC
+		SELECT mv.id, mv.module_id, mv.version, mv.storage_path, mv.storage_backend, mv.size_bytes, mv.checksum, mv.readme,
+		       mv.published_by, u.name as published_by_name, mv.download_count,
+		       COALESCE(mv.deprecated, false), mv.deprecated_at, mv.deprecation_message, mv.created_at
+		FROM module_versions mv
+		LEFT JOIN users u ON mv.published_by = u.id
+		WHERE mv.module_id = $1
+		ORDER BY mv.created_at DESC
 	`
 
 	rows, err := r.db.QueryContext(ctx, query, moduleID)
@@ -187,6 +194,7 @@ func (r *ModuleRepository) ListVersions(ctx context.Context, moduleID string) ([
 			&v.Checksum,
 			&v.Readme,
 			&v.PublishedBy,
+			&v.PublishedByName,
 			&v.DownloadCount,
 			&v.Deprecated,
 			&v.DeprecatedAt,
@@ -232,7 +240,7 @@ func (r *ModuleRepository) SearchModules(ctx context.Context, orgID, query, name
 	// Only filter by organization if orgID is provided (multi-tenant mode)
 	if orgID != "" {
 		argCount++
-		whereClause = fmt.Sprintf("WHERE organization_id = $%d", argCount)
+		whereClause = fmt.Sprintf("WHERE m.organization_id = $%d", argCount)
 		args = append(args, orgID)
 	} else {
 		whereClause = "WHERE 1=1" // No org filter in single-tenant mode
@@ -240,19 +248,19 @@ func (r *ModuleRepository) SearchModules(ctx context.Context, orgID, query, name
 
 	if query != "" {
 		argCount++
-		whereClause += fmt.Sprintf(" AND (namespace ILIKE $%d OR name ILIKE $%d OR description ILIKE $%d)", argCount, argCount, argCount)
+		whereClause += fmt.Sprintf(" AND (m.namespace ILIKE $%d OR m.name ILIKE $%d OR m.description ILIKE $%d)", argCount, argCount, argCount)
 		args = append(args, "%"+query+"%")
 	}
 
 	if namespace != "" {
 		argCount++
-		whereClause += fmt.Sprintf(" AND namespace = $%d", argCount)
+		whereClause += fmt.Sprintf(" AND m.namespace = $%d", argCount)
 		args = append(args, namespace)
 	}
 
 	if system != "" {
 		argCount++
-		whereClause += fmt.Sprintf(" AND system = $%d", argCount)
+		whereClause += fmt.Sprintf(" AND m.system = $%d", argCount)
 		args = append(args, system)
 	}
 
@@ -264,12 +272,14 @@ func (r *ModuleRepository) SearchModules(ctx context.Context, orgID, query, name
 		return nil, 0, fmt.Errorf("failed to count modules: %w", err)
 	}
 
-	// Query with pagination
+	// Query with pagination and JOIN for created_by_name
 	query = fmt.Sprintf(`
-		SELECT id, organization_id, namespace, name, system, description, source, created_at, updated_at
-		FROM modules
+		SELECT m.id, m.organization_id, m.namespace, m.name, m.system, m.description, m.source,
+		       m.created_by, u.name as created_by_name, m.created_at, m.updated_at
+		FROM modules m
+		LEFT JOIN users u ON m.created_by = u.id
 		%s
-		ORDER BY created_at DESC
+		ORDER BY m.created_at DESC
 		LIMIT $%d OFFSET $%d
 	`, whereClause, argCount+1, argCount+2)
 
@@ -292,6 +302,8 @@ func (r *ModuleRepository) SearchModules(ctx context.Context, orgID, query, name
 			&m.System,
 			&m.Description,
 			&m.Source,
+			&m.CreatedBy,
+			&m.CreatedByName,
 			&m.CreatedAt,
 			&m.UpdatedAt,
 		)

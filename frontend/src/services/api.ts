@@ -2,8 +2,10 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 
 // In dev mode, use empty baseURL to use relative paths (goes through Vite proxy)
 // In production, use the configured URL or default to current origin
-const IS_DEV_MODE = import.meta.env.DEV;
-const API_BASE_URL = IS_DEV_MODE ? '' : (import.meta.env.VITE_API_URL || '');
+const API_BASE_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '');
+
+// Only use mock responses when explicitly enabled (e.g., when backend is not running)
+const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 
 class ApiClient {
   private client: AxiosInstance;
@@ -37,8 +39,8 @@ class ApiClient {
         return response;
       },
       (error: AxiosError) => {
-        // In dev mode, return mock data for all errors
-        if (IS_DEV_MODE) {
+        // Only return mock data when explicitly enabled (for offline development)
+        if (USE_MOCK_DATA) {
           return this.getMockResponse(error.config?.url || '');
         }
         
@@ -89,6 +91,19 @@ class ApiClient {
   async getCurrentUser() {
     const response = await this.client.get('/api/v1/auth/me');
     return response.data.user;
+  }
+
+  async getCurrentUserWithRole(): Promise<{
+    user: import('../types').User;
+    role_template: import('../types').RoleTemplateInfo | null;
+    allowed_scopes: string[];
+  }> {
+    const response = await this.client.get('/api/v1/auth/me');
+    return {
+      user: response.data.user,
+      role_template: response.data.role_template || null,
+      allowed_scopes: response.data.allowed_scopes || [],
+    };
   }
 
   // Modules
@@ -210,12 +225,15 @@ class ApiClient {
   // Helper to transform user from API format to frontend format
   private transformUser(user: any) {
     return {
-      id: user.ID,
-      email: user.Email,
-      name: user.Name,
-      oidc_sub: user.OidcSub,
-      created_at: user.CreatedAt,
-      updated_at: user.UpdatedAt,
+      id: user.ID || user.id,
+      email: user.Email || user.email,
+      name: user.Name || user.name,
+      oidc_sub: user.OidcSub || user.oidc_sub,
+      role_template_id: user.RoleTemplateID || user.role_template_id,
+      role_template_name: user.RoleTemplateName || user.role_template_name,
+      role_template_display_name: user.RoleTemplateDisplayName || user.role_template_display_name,
+      created_at: user.CreatedAt || user.created_at,
+      updated_at: user.UpdatedAt || user.updated_at,
     };
   }
 
@@ -252,7 +270,7 @@ class ApiClient {
     return this.transformUser(response.data.user);
   }
 
-  async updateUser(id: string, data: { name: string }) {
+  async updateUser(id: string, data: { name?: string; email?: string }) {
     const response = await this.client.put(`/api/v1/users/${id}`, data);
     return this.transformUser(response.data.user);
   }
@@ -320,7 +338,7 @@ class ApiClient {
     return response.data;
   }
 
-  async addOrganizationMember(orgId: string, data: { user_id: string; role: string }) {
+  async addOrganizationMember(orgId: string, data: { user_id: string; role_template_id?: string }) {
     const response = await this.client.post(
       `/api/v1/organizations/${orgId}/members`,
       data
@@ -331,7 +349,7 @@ class ApiClient {
   async updateOrganizationMember(
     orgId: string,
     userId: string,
-    data: { role: string }
+    data: { role_template_id?: string }
   ) {
     const response = await this.client.put(
       `/api/v1/organizations/${orgId}/members/${userId}`,
@@ -347,17 +365,53 @@ class ApiClient {
     return response.data;
   }
 
+  async listOrganizationMembers(orgId: string) {
+    const response = await this.client.get(`/api/v1/organizations/${orgId}/members`);
+    return response.data.members || [];
+  }
+
+  async getUserMemberships(userId: string) {
+    const response = await this.client.get(`/api/v1/users/${userId}/memberships`);
+    return response.data.memberships || [];
+  }
+
+  // Self-access endpoint for current user's memberships (no special scope required)
+  async getCurrentUserMemberships() {
+    const response = await this.client.get('/api/v1/users/me/memberships');
+    return response.data.memberships || [];
+  }
+
   // API Keys
   async listAPIKeys(organizationId?: string) {
     const response = await this.client.get('/api/v1/apikeys', {
       params: organizationId ? { organization_id: organizationId } : {},
     });
-    return response.data;
+
+    const rawKeys = response.data?.keys || [];
+
+    // Normalize keys to frontend shape (support PascalCase from Go structs
+    // or snake_case from explicit JSON mapping)
+    const keys = rawKeys.map((k: any) => ({
+      id: k.id || k.ID,
+      user_id: k.user_id || k.UserID,
+      user_name: k.user_name || k.UserName || null,
+      organization_id: k.organization_id || k.OrganizationID,
+      name: k.name || k.Name || '',
+      description: k.description || k.Description || '',
+      key_prefix: k.key_prefix || k.KeyPrefix || '',
+      scopes: k.scopes || k.Scopes || [],
+      expires_at: k.expires_at || k.ExpiresAt || null,
+      last_used_at: k.last_used_at || k.LastUsedAt || null,
+      created_at: k.created_at || k.CreatedAt || '',
+    }));
+
+    return keys;
   }
 
   async createAPIKey(data: {
     name: string;
     organization_id: string;
+    description?: string;
     scopes: string[];
     expires_at?: string;
   }) {
@@ -555,6 +609,179 @@ class ApiClient {
 
   async getMirrorStatus(id: string) {
     const response = await this.client.get(`/api/v1/admin/mirrors/${id}/status`);
+    return response.data;
+  }
+
+  // ============================================================================
+  // Role Templates
+  // ============================================================================
+
+  async listRoleTemplates() {
+    const response = await this.client.get('/api/v1/admin/role-templates');
+    return response.data || [];
+  }
+
+  async getRoleTemplate(id: string) {
+    const response = await this.client.get(`/api/v1/admin/role-templates/${id}`);
+    return response.data;
+  }
+
+  async createRoleTemplate(data: {
+    name: string;
+    display_name: string;
+    description?: string;
+    scopes: string[];
+  }) {
+    const response = await this.client.post('/api/v1/admin/role-templates', data);
+    return response.data;
+  }
+
+  async updateRoleTemplate(
+    id: string,
+    data: {
+      name?: string;
+      display_name?: string;
+      description?: string;
+      scopes?: string[];
+    }
+  ) {
+    const response = await this.client.put(`/api/v1/admin/role-templates/${id}`, data);
+    return response.data;
+  }
+
+  async deleteRoleTemplate(id: string) {
+    const response = await this.client.delete(`/api/v1/admin/role-templates/${id}`);
+    return response.data;
+  }
+
+  // ============================================================================
+  // Mirror Approval Requests
+  // ============================================================================
+
+  async listApprovalRequests(options?: { organization_id?: string; status?: string }) {
+    const params: Record<string, string> = {};
+    if (options?.organization_id) params.organization_id = options.organization_id;
+    if (options?.status) params.status = options.status;
+    const response = await this.client.get('/api/v1/admin/approvals', { params });
+    return response.data || [];
+  }
+
+  async getApprovalRequest(id: string) {
+    const response = await this.client.get(`/api/v1/admin/approvals/${id}`);
+    return response.data;
+  }
+
+  async createApprovalRequest(data: {
+    mirror_config_id: string;
+    provider_namespace: string;
+    provider_name?: string;
+    reason?: string;
+  }) {
+    const response = await this.client.post('/api/v1/admin/approvals', data);
+    return response.data;
+  }
+
+  async reviewApproval(id: string, data: { status: 'approved' | 'rejected'; notes?: string }) {
+    const response = await this.client.put(`/api/v1/admin/approvals/${id}/review`, data);
+    return response.data;
+  }
+
+  // ============================================================================
+  // Mirror Policies
+  // ============================================================================
+
+  async listMirrorPolicies(organizationId?: string) {
+    const params = organizationId ? { organization_id: organizationId } : {};
+    const response = await this.client.get('/api/v1/admin/policies', { params });
+    return response.data || [];
+  }
+
+  async getMirrorPolicy(id: string) {
+    const response = await this.client.get(`/api/v1/admin/policies/${id}`);
+    return response.data;
+  }
+
+  async createMirrorPolicy(data: {
+    organization_id?: string;
+    name: string;
+    description?: string;
+    policy_type: 'allow' | 'deny';
+    upstream_registry?: string;
+    namespace_pattern?: string;
+    provider_pattern?: string;
+    priority?: number;
+    is_active?: boolean;
+    requires_approval?: boolean;
+  }) {
+    const response = await this.client.post('/api/v1/admin/policies', data);
+    return response.data;
+  }
+
+  async updateMirrorPolicy(
+    id: string,
+    data: {
+      name?: string;
+      description?: string;
+      policy_type?: 'allow' | 'deny';
+      upstream_registry?: string;
+      namespace_pattern?: string;
+      provider_pattern?: string;
+      priority?: number;
+      is_active?: boolean;
+      requires_approval?: boolean;
+    }
+  ) {
+    const response = await this.client.put(`/api/v1/admin/policies/${id}`, data);
+    return response.data;
+  }
+
+  async deleteMirrorPolicy(id: string) {
+    const response = await this.client.delete(`/api/v1/admin/policies/${id}`);
+    return response.data;
+  }
+
+  async evaluateMirrorPolicy(data: {
+    registry: string;
+    namespace: string;
+    provider: string;
+  }, organizationId?: string) {
+    const params = organizationId ? { organization_id: organizationId } : {};
+    const response = await this.client.post('/api/v1/admin/policies/evaluate', data, { params });
+    return response.data;
+  }
+
+  // ============================================================================
+  // Development-Only Endpoints (disabled in production)
+  // ============================================================================
+
+  async getDevStatus(): Promise<{ dev_mode: boolean; message?: string }> {
+    const response = await this.client.get('/api/v1/dev/status');
+    return response.data;
+  }
+
+  async listUsersForImpersonation(): Promise<{
+    users: Array<{
+      id: string;
+      email: string;
+      name: string;
+      primary_role: string;
+    }>;
+    dev_mode: boolean;
+  }> {
+    const response = await this.client.get('/api/v1/dev/users');
+    return response.data;
+  }
+
+  async impersonateUser(userId: string): Promise<{
+    token: string;
+    user: {
+      id: string;
+      email: string;
+      name: string;
+    };
+    message: string;
+  }> {
+    const response = await this.client.post(`/api/v1/dev/impersonate/${userId}`);
     return response.data;
   }
 }

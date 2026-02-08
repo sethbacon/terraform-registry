@@ -10,8 +10,11 @@ type Provider struct {
 	Type           string
 	Description    *string
 	Source         *string
+	CreatedBy      *string // User ID who created this provider
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+	// Joined fields (not stored in providers table)
+	CreatedByName *string // User name who created this provider (joined from users table)
 }
 
 // ProviderVersion represents a specific version of a provider
@@ -28,6 +31,8 @@ type ProviderVersion struct {
 	DeprecatedAt        *time.Time // When the version was deprecated
 	DeprecationMessage  *string    // Optional message explaining deprecation
 	CreatedAt           time.Time
+	// Joined fields (not stored in provider_versions table)
+	PublishedByName *string // User name who published this version (joined from users table)
 }
 
 // ProviderPlatform represents a platform-specific binary for a provider version

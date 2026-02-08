@@ -38,6 +38,7 @@ import {
 import api from '../services/api';
 import { Module, ModuleVersion } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { REGISTRY_HOST } from '../config';
 
 const ModuleDetailPage: React.FC = () => {
   const { namespace, name, system } = useParams<{
@@ -73,29 +74,44 @@ const ModuleDetailPage: React.FC = () => {
       setLoading(true);
       setError(null);
 
+      // Use getModule API which returns module with embedded versions
+      // Also fetch versions from the Terraform protocol endpoint for readme/published_at
       const [moduleData, versionsData] = await Promise.all([
-        api.searchModules({ namespace, name, provider: system, limit: 1 }),
+        api.getModule(namespace, name, system),
         api.getModuleVersions(namespace, name, system),
       ]);
 
-      if (moduleData.modules.length === 0) {
+      if (!moduleData) {
         setError('Module not found');
         return;
       }
 
-      setModule(moduleData.modules[0]);
+      setModule(moduleData);
 
-      // Backend returns { modules: [{ versions: [...] }] }
-      const versions = versionsData.modules?.[0]?.versions || [];
-      setVersions(versions);
+      // Merge version data - getModule has basic version info, getModuleVersions has readme/published_at
+      const protocolVersions = versionsData.modules?.[0]?.versions || [];
+      const moduleVersions = moduleData.versions || [];
 
-      // Select latest version by default
-      if (versions.length > 0) {
-        setSelectedVersion(versions[0]);
+      // Use protocol versions as they have more complete data (readme, published_at)
+      // Fall back to module versions if protocol versions not available
+      const mergedVersions: ModuleVersion[] = protocolVersions.length > 0 ? protocolVersions : moduleVersions;
+      setVersions(mergedVersions);
+
+      // Select latest version by default (preserve current selection if reloading)
+      if (mergedVersions.length > 0) {
+        const currentVersion = selectedVersion?.version;
+        const matchingVersion = currentVersion
+          ? mergedVersions.find((v: ModuleVersion) => v.version === currentVersion)
+          : null;
+        setSelectedVersion(matchingVersion || mergedVersions[0]);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load module details:', err);
-      setError('Failed to load module details. Please try again.');
+      if (err?.response?.status === 404) {
+        setError('Module not found');
+      } else {
+        setError('Failed to load module details. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -204,7 +220,8 @@ const ModuleDetailPage: React.FC = () => {
     if (!module || !selectedVersion) return '';
 
     return `module "${name}" {
-  source  = "${window.location.origin}/v1/modules/${namespace}/${name}/${system}/${selectedVersion.version}"
+  source  = "${REGISTRY_HOST}/${namespace}/${name}/${system}"
+  version = "${selectedVersion.version}"
 
   # Add your module variables here
 }`;
@@ -309,7 +326,7 @@ const ModuleDetailPage: React.FC = () => {
               icon={<Warning />}
             />
           )}
-          <Chip label={`${module.download_count} downloads`} />
+          <Chip label={`${module.download_count ?? 0} downloads`} />
           {isAuthenticated && (
             <Button
               variant="outlined"
@@ -341,7 +358,8 @@ const ModuleDetailPage: React.FC = () => {
               component="pre"
               sx={{
                 p: 2,
-                backgroundColor: '#f5f5f5',
+                backgroundColor: (theme) => theme.palette.mode === 'dark' ? '#2d2d2d' : '#f5f5f5',
+                color: (theme) => theme.palette.mode === 'dark' ? '#e6e6e6' : '#1e1e1e',
                 borderRadius: 1,
                 overflow: 'auto',
                 fontSize: '0.875rem',
@@ -359,20 +377,22 @@ const ModuleDetailPage: React.FC = () => {
               </Typography>
               <Divider sx={{ mb: 2 }} />
               <Box
-                sx={{
+                sx={(theme) => ({
                   '& h1': { fontSize: '2rem', fontWeight: 600, mt: 2, mb: 1 },
                   '& h2': { fontSize: '1.5rem', fontWeight: 600, mt: 2, mb: 1 },
                   '& h3': { fontSize: '1.25rem', fontWeight: 600, mt: 2, mb: 1 },
                   '& p': { mb: 2 },
                   '& code': {
-                    backgroundColor: '#f5f5f5',
+                    backgroundColor: theme.palette.mode === 'dark' ? '#2d2d2d' : '#f5f5f5',
+                    color: theme.palette.mode === 'dark' ? '#e6e6e6' : '#1e1e1e',
                     padding: '2px 6px',
                     borderRadius: '4px',
                     fontFamily: 'monospace',
                     fontSize: '0.875rem',
                   },
                   '& pre': {
-                    backgroundColor: '#f5f5f5',
+                    backgroundColor: theme.palette.mode === 'dark' ? '#2d2d2d' : '#f5f5f5',
+                    color: theme.palette.mode === 'dark' ? '#e6e6e6' : '#1e1e1e',
                     padding: 2,
                     borderRadius: 1,
                     overflow: 'auto',
@@ -385,12 +405,15 @@ const ModuleDetailPage: React.FC = () => {
                   '& li': { mb: 1 },
                   '& table': { borderCollapse: 'collapse', width: '100%', mb: 2 },
                   '& th, & td': {
-                    border: '1px solid #ddd',
+                    border: theme.palette.mode === 'dark' ? '1px solid #444' : '1px solid #ddd',
                     padding: '8px 12px',
                     textAlign: 'left',
                   },
-                  '& th': { backgroundColor: '#f5f5f5', fontWeight: 600 },
-                }}
+                  '& th': {
+                    backgroundColor: theme.palette.mode === 'dark' ? '#2d2d2d' : '#f5f5f5',
+                    fontWeight: 600
+                  },
+                })}
               >
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedVersion.readme}</ReactMarkdown>
               </Box>
@@ -423,8 +446,13 @@ const ModuleDetailPage: React.FC = () => {
                 <strong>Total Downloads:</strong> {module.download_count ?? 0}
               </Typography>
               <Typography variant="body2">
-                <strong>Organization:</strong> {module.organization_name || 'N/A'}
+                <strong>Organization:</strong> {module.organization_name || namespace}
               </Typography>
+              {module.created_by_name && (
+                <Typography variant="body2">
+                  <strong>Created By:</strong> {module.created_by_name}
+                </Typography>
+              )}
             </Box>
           </Paper>
 
@@ -437,13 +465,18 @@ const ModuleDetailPage: React.FC = () => {
               <Divider sx={{ mb: 2 }} />
               <Typography variant="body2" sx={{ mb: 2 }}>
                 <strong>Published:</strong>{' '}
-                {selectedVersion.published_at 
-                  ? new Date(selectedVersion.published_at).toISOString().split('T')[0]
+                {(selectedVersion.published_at || selectedVersion.created_at)
+                  ? new Date(selectedVersion.published_at || selectedVersion.created_at!).toLocaleDateString()
                   : 'N/A'}
               </Typography>
               <Typography variant="body2" sx={{ mb: 2 }}>
                 <strong>Downloads:</strong> {selectedVersion.download_count ?? 0}
               </Typography>
+              {selectedVersion.published_by_name && (
+                <Typography variant="body2" sx={{ mb: 2 }}>
+                  <strong>Published By:</strong> {selectedVersion.published_by_name}
+                </Typography>
+              )}
 
               {/* Deprecation Status */}
               {selectedVersion.deprecated && (
@@ -451,7 +484,7 @@ const ModuleDetailPage: React.FC = () => {
                   <Typography variant="body2">
                     <strong>Deprecated</strong>
                     {selectedVersion.deprecated_at && (
-                      <> on {new Date(selectedVersion.deprecated_at).toISOString().split('T')[0]}</>
+                      <> on {new Date(selectedVersion.deprecated_at).toLocaleDateString()}</>
                     )}
                   </Typography>
                   {selectedVersion.deprecation_message && (

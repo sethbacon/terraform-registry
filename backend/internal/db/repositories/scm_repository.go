@@ -27,9 +27,9 @@ func NewSCMRepository(db *sqlx.DB) *SCMRepository {
 func (r *SCMRepository) CreateProvider(ctx context.Context, provider *scm.SCMProviderRecord) error {
 	query := `
 		INSERT INTO scm_providers (
-			id, organization_id, provider_type, display_name, base_url,
-			oauth_client_id, oauth_client_secret_enc, webhook_signing_secret,
-			enabled, created_at, updated_at
+			id, organization_id, provider_type, name, base_url,
+			client_id, client_secret_encrypted, webhook_secret,
+			is_active, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 		)`
@@ -75,9 +75,9 @@ func (r *SCMRepository) ListProviders(ctx context.Context, orgID uuid.UUID) ([]*
 func (r *SCMRepository) UpdateProvider(ctx context.Context, provider *scm.SCMProviderRecord) error {
 	query := `
 		UPDATE scm_providers SET
-			display_name = $2, base_url = $3, oauth_client_id = $4,
-			oauth_client_secret_enc = $5, webhook_signing_secret = $6,
-			enabled = $7, updated_at = $8
+			name = $2, base_url = $3, client_id = $4,
+			client_secret_encrypted = $5, webhook_secret = $6,
+			is_active = $7, updated_at = $8
 		WHERE id = $1`
 
 	_, err := r.db.ExecContext(ctx, query,
@@ -100,14 +100,14 @@ func (r *SCMRepository) DeleteProvider(ctx context.Context, id uuid.UUID) error 
 // SaveUserToken saves or updates a user's OAuth token
 func (r *SCMRepository) SaveUserToken(ctx context.Context, token *scm.SCMUserTokenRecord) error {
 	query := `
-		INSERT INTO scm_user_tokens (
-			id, user_id, scm_provider_id, access_token_enc, refresh_token_enc,
-			token_type, token_expiry, granted_scopes, created_at, updated_at
+		INSERT INTO scm_oauth_tokens (
+			id, user_id, scm_provider_id, access_token_encrypted, refresh_token_encrypted,
+			token_type, expires_at, scopes, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 		) ON CONFLICT (user_id, scm_provider_id) DO UPDATE SET
-			access_token_enc = $4, refresh_token_enc = $5, token_type = $6,
-			token_expiry = $7, granted_scopes = $8, updated_at = $10`
+			access_token_encrypted = $4, refresh_token_encrypted = $5, token_type = $6,
+			expires_at = $7, scopes = $8, updated_at = $10`
 
 	_, err := r.db.ExecContext(ctx, query,
 		token.ID, token.UserID, token.SCMProviderID, token.AccessTokenEncrypted,
@@ -120,7 +120,7 @@ func (r *SCMRepository) SaveUserToken(ctx context.Context, token *scm.SCMUserTok
 // GetUserToken retrieves a user's OAuth token for a provider
 func (r *SCMRepository) GetUserToken(ctx context.Context, userID, providerID uuid.UUID) (*scm.SCMUserTokenRecord, error) {
 	var token scm.SCMUserTokenRecord
-	query := `SELECT * FROM scm_user_tokens WHERE user_id = $1 AND scm_provider_id = $2`
+	query := `SELECT * FROM scm_oauth_tokens WHERE user_id = $1 AND scm_provider_id = $2`
 	err := r.db.GetContext(ctx, &token, query, userID, providerID)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -130,7 +130,7 @@ func (r *SCMRepository) GetUserToken(ctx context.Context, userID, providerID uui
 
 // DeleteUserToken deletes a user's OAuth token
 func (r *SCMRepository) DeleteUserToken(ctx context.Context, userID, providerID uuid.UUID) error {
-	query := `DELETE FROM scm_user_tokens WHERE user_id = $1 AND scm_provider_id = $2`
+	query := `DELETE FROM scm_oauth_tokens WHERE user_id = $1 AND scm_provider_id = $2`
 	_, err := r.db.ExecContext(ctx, query, userID, providerID)
 	return err
 }
@@ -140,11 +140,11 @@ func (r *SCMRepository) DeleteUserToken(ctx context.Context, userID, providerID 
 // CreateModuleSourceRepo creates a link between a module and a repository
 func (r *SCMRepository) CreateModuleSourceRepo(ctx context.Context, link *scm.ModuleSourceRepoRecord) error {
 	query := `
-		INSERT INTO module_source_repos (
-			id, module_id, scm_provider_id, repo_owner, repo_name, repo_full_url,
-			primary_branch, module_subpath, version_tag_glob, publish_on_tag,
-			webhook_external_id, webhook_callback_url, webhook_active,
-			sync_last_run, sync_last_commit, created_at, updated_at
+		INSERT INTO module_scm_repos (
+			id, module_id, scm_provider_id, repository_owner, repository_name, repository_url,
+			default_branch, module_path, tag_pattern, auto_publish,
+			webhook_id, webhook_url, webhook_enabled,
+			last_sync_at, last_sync_commit, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
 		)`
@@ -162,7 +162,7 @@ func (r *SCMRepository) CreateModuleSourceRepo(ctx context.Context, link *scm.Mo
 // GetModuleSourceRepo retrieves the source repository link for a module
 func (r *SCMRepository) GetModuleSourceRepo(ctx context.Context, moduleID uuid.UUID) (*scm.ModuleSourceRepoRecord, error) {
 	var link scm.ModuleSourceRepoRecord
-	query := `SELECT * FROM module_source_repos WHERE module_id = $1`
+	query := `SELECT * FROM module_scm_repos WHERE module_id = $1`
 	err := r.db.GetContext(ctx, &link, query, moduleID)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -173,11 +173,11 @@ func (r *SCMRepository) GetModuleSourceRepo(ctx context.Context, moduleID uuid.U
 // UpdateModuleSourceRepo updates a module source repository link
 func (r *SCMRepository) UpdateModuleSourceRepo(ctx context.Context, link *scm.ModuleSourceRepoRecord) error {
 	query := `
-		UPDATE module_source_repos SET
-			repo_owner = $2, repo_name = $3, repo_full_url = $4,
-			primary_branch = $5, module_subpath = $6, version_tag_glob = $7,
-			publish_on_tag = $8, webhook_external_id = $9, webhook_callback_url = $10,
-			webhook_active = $11, sync_last_run = $12, sync_last_commit = $13,
+		UPDATE module_scm_repos SET
+			repository_owner = $2, repository_name = $3, repository_url = $4,
+			default_branch = $5, module_path = $6, tag_pattern = $7,
+			auto_publish = $8, webhook_id = $9, webhook_url = $10,
+			webhook_enabled = $11, last_sync_at = $12, last_sync_commit = $13,
 			updated_at = $14
 		WHERE id = $1`
 
@@ -192,7 +192,7 @@ func (r *SCMRepository) UpdateModuleSourceRepo(ctx context.Context, link *scm.Mo
 
 // DeleteModuleSourceRepo deletes a module source repository link
 func (r *SCMRepository) DeleteModuleSourceRepo(ctx context.Context, moduleID uuid.UUID) error {
-	query := `DELETE FROM module_source_repos WHERE module_id = $1`
+	query := `DELETE FROM module_scm_repos WHERE module_id = $1`
 	_, err := r.db.ExecContext(ctx, query, moduleID)
 	return err
 }
@@ -212,11 +212,11 @@ func (r *SCMRepository) CreateWebhookLog(ctx context.Context, log *scm.SCMWebhoo
 	}
 
 	query := `
-		INSERT INTO scm_webhook_log (
-			id, module_source_repo_id, delivery_id, event_kind, git_ref, git_commit,
-			git_tag, raw_payload, raw_headers, computed_signature, signature_verified,
-			processing_state, processing_began_at, processing_ended_at,
-			published_version_id, error_message, created_at
+		INSERT INTO scm_webhook_events (
+			id, module_scm_repo_id, event_id, event_type, ref, commit_sha,
+			tag_name, payload, headers, signature, signature_valid,
+			processed, processing_started_at, processed_at,
+			result_version_id, error, created_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
 		)`
@@ -224,7 +224,7 @@ func (r *SCMRepository) CreateWebhookLog(ctx context.Context, log *scm.SCMWebhoo
 	_, err = r.db.ExecContext(ctx, query,
 		log.ID, log.ModuleSCMRepoID, log.EventID, log.EventType, log.Ref,
 		log.CommitSHA, log.TagName, payloadJSON, headersJSON, log.Signature,
-		log.SignatureValid, "pending", log.ProcessingStartedAt,
+		log.SignatureValid, false, log.ProcessingStartedAt,
 		log.ProcessedAt, log.ResultVersionID, log.Error, log.CreatedAt,
 	)
 	return err
@@ -233,7 +233,7 @@ func (r *SCMRepository) CreateWebhookLog(ctx context.Context, log *scm.SCMWebhoo
 // GetWebhookLog retrieves a webhook log entry
 func (r *SCMRepository) GetWebhookLog(ctx context.Context, id uuid.UUID) (*scm.SCMWebhookLogRecord, error) {
 	var log scm.SCMWebhookLogRecord
-	query := `SELECT * FROM scm_webhook_log WHERE id = $1`
+	query := `SELECT * FROM scm_webhook_events WHERE id = $1`
 	err := r.db.GetContext(ctx, &log, query, id)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -244,7 +244,7 @@ func (r *SCMRepository) GetWebhookLog(ctx context.Context, id uuid.UUID) (*scm.S
 // ListWebhookLogs lists webhook logs for a module source repository
 func (r *SCMRepository) ListWebhookLogs(ctx context.Context, repoID uuid.UUID, limit int) ([]*scm.SCMWebhookLogRecord, error) {
 	var logs []*scm.SCMWebhookLogRecord
-	query := `SELECT * FROM scm_webhook_log WHERE module_source_repo_id = $1 ORDER BY created_at DESC LIMIT $2`
+	query := `SELECT * FROM scm_webhook_events WHERE module_scm_repo_id = $1 ORDER BY created_at DESC LIMIT $2`
 	err := r.db.SelectContext(ctx, &logs, query, repoID, limit)
 	return logs, err
 }
@@ -253,9 +253,9 @@ func (r *SCMRepository) ListWebhookLogs(ctx context.Context, repoID uuid.UUID, l
 func (r *SCMRepository) UpdateWebhookLogState(ctx context.Context, id uuid.UUID, state string, errorMsg *string, versionID *uuid.UUID) error {
 	now := time.Now()
 	query := `
-		UPDATE scm_webhook_log SET
-			processing_state = $2, processing_ended_at = $3,
-			error_message = $4, published_version_id = $5
+		UPDATE scm_webhook_events SET
+			processed = true, processed_at = $3,
+			error = $4, result_version_id = $5
 		WHERE id = $1`
 
 	_, err := r.db.ExecContext(ctx, query, id, state, now, errorMsg, versionID)
@@ -267,10 +267,10 @@ func (r *SCMRepository) UpdateWebhookLogState(ctx context.Context, id uuid.UUID,
 // CreateImmutabilityAlert creates a tag immutability violation alert
 func (r *SCMRepository) CreateImmutabilityAlert(ctx context.Context, alert *scm.TagImmutabilityAlertRecord) error {
 	query := `
-		INSERT INTO tag_immutability_alerts (
-			id, module_version_id, tag_reference, expected_commit, actual_commit,
-			first_detected_at, notification_sent, notification_sent_at,
-			acknowledged, acknowledged_at, acknowledged_by, acknowledgment_note
+		INSERT INTO version_immutability_violations (
+			id, module_version_id, tag_name, original_commit_sha, detected_commit_sha,
+			detected_at, alert_sent, alert_sent_at,
+			resolved, resolved_at, resolved_by, notes
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 		)`
@@ -287,7 +287,7 @@ func (r *SCMRepository) CreateImmutabilityAlert(ctx context.Context, alert *scm.
 // ListUnacknowledgedAlerts lists all unacknowledged immutability alerts
 func (r *SCMRepository) ListUnacknowledgedAlerts(ctx context.Context) ([]*scm.TagImmutabilityAlertRecord, error) {
 	var alerts []*scm.TagImmutabilityAlertRecord
-	query := `SELECT * FROM tag_immutability_alerts WHERE acknowledged = false ORDER BY first_detected_at DESC`
+	query := `SELECT * FROM version_immutability_violations WHERE resolved = false ORDER BY detected_at DESC`
 	err := r.db.SelectContext(ctx, &alerts, query)
 	return alerts, err
 }
@@ -296,8 +296,8 @@ func (r *SCMRepository) ListUnacknowledgedAlerts(ctx context.Context) ([]*scm.Ta
 func (r *SCMRepository) AcknowledgeAlert(ctx context.Context, id, userID uuid.UUID, note string) error {
 	now := time.Now()
 	query := `
-		UPDATE tag_immutability_alerts SET
-			acknowledged = true, acknowledged_at = $2, acknowledged_by = $3, acknowledgment_note = $4
+		UPDATE version_immutability_violations SET
+			resolved = true, resolved_at = $2, resolved_by = $3, notes = $4
 		WHERE id = $1`
 
 	_, err := r.db.ExecContext(ctx, query, id, now, userID, note)

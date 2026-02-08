@@ -77,25 +77,25 @@ func SearchHandler(db *sql.DB, cfg *config.Config) gin.HandlerFunc {
 			// Get latest version for each provider
 			versions, _ := providerRepo.ListVersions(c.Request.Context(), p.ID)
 			var latestVersion string
-			var totalDownloads int64
 			if len(versions) > 0 {
 				latestVersion = versions[0].Version
-				// For providers, downloads are tracked at the platform level
-				// We would need to sum across all platforms for all versions
-				// For now, set to 0 as we don't have a direct query for this
-				totalDownloads = 0
 			}
 
+			// Get total downloads across all platforms for this provider
+			totalDownloads, _ := providerRepo.GetTotalDownloadCount(c.Request.Context(), p.ID)
+
 			results[i] = gin.H{
-				"id":             p.ID,
-				"namespace":      p.Namespace,
-				"type":           p.Type,
-				"description":    p.Description,
-				"source":         p.Source,
-				"latest_version": latestVersion,
-				"download_count": totalDownloads,
-				"created_at":     p.CreatedAt,
-				"updated_at":     p.UpdatedAt,
+				"id":              p.ID,
+				"namespace":       p.Namespace,
+				"type":            p.Type,
+				"description":     p.Description,
+				"source":          p.Source,
+				"latest_version":  latestVersion,
+				"download_count":  totalDownloads,
+				"created_by":      p.CreatedBy,
+				"created_by_name": p.CreatedByName,
+				"created_at":      p.CreatedAt,
+				"updated_at":      p.UpdatedAt,
 			}
 		}
 

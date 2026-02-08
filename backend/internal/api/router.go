@@ -45,6 +45,7 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	moduleRepo := repositories.NewModuleRepository(db)
 	providerRepo := repositories.NewProviderRepository(db)
 	auditRepo := repositories.NewAuditRepository(db)
+	orgRepo := repositories.NewOrganizationRepository(db)
 
 	// Wrap *sql.DB with sqlx for SCM and mirror repositories
 	sqlxDB := sqlx.NewDb(db, "postgres")
@@ -73,6 +74,7 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	router.Use(gin.Recovery())
 	router.Use(LoggerMiddleware(cfg))
 	router.Use(CORSMiddleware(cfg))
+	router.Use(middleware.SecurityHeadersMiddleware(middleware.APISecurityHeadersConfig()))
 
 	// Health check endpoint
 	router.GET("/health", healthCheckHandler(db))
@@ -89,7 +91,7 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	// Module Registry endpoints (v1) - Terraform Protocol
 	// These are public endpoints that support optional authentication
 	v1Modules := router.Group("/v1/modules")
-	v1Modules.Use(middleware.OptionalAuthMiddleware(cfg, userRepo, apiKeyRepo))
+	v1Modules.Use(middleware.OptionalAuthMiddleware(cfg, userRepo, apiKeyRepo, orgRepo))
 	{
 		v1Modules.GET("/:namespace/:name/:system/versions", modules.ListVersionsHandler(db, cfg))
 		v1Modules.GET("/:namespace/:name/:system/:version/download", modules.DownloadHandler(db, storageBackend, cfg))
@@ -101,7 +103,7 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	// Provider Registry endpoints (v1)
 	// These are for the standard Provider Registry Protocol
 	v1Providers := router.Group("/v1/providers")
-	v1Providers.Use(middleware.OptionalAuthMiddleware(cfg, userRepo, apiKeyRepo))
+	v1Providers.Use(middleware.OptionalAuthMiddleware(cfg, userRepo, apiKeyRepo, orgRepo))
 	{
 		v1Providers.GET("/:namespace/:type/versions", providers.ListVersionsHandler(db, cfg))
 		v1Providers.GET("/:namespace/:type/:version/download/:os/:arch", providers.DownloadHandler(db, storageBackend, cfg))
@@ -131,6 +133,10 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	providerAdminHandlers := admin.NewProviderAdminHandlers(db, storageBackend, cfg)
 	moduleAdminHandlers := admin.NewModuleAdminHandlers(db, storageBackend, cfg)
 
+	// Initialize RBAC handlers
+	rbacRepo := repositories.NewRBACRepository(sqlxDB)
+	rbacHandlers := admin.NewRBACHandlers(rbacRepo)
+
 	// Initialize SCM handlers with the already-created repositories and token cipher
 	scmProviderHandlers := admin.NewSCMProviderHandlers(cfg, scmRepo, tokenCipher)
 	scmOAuthHandlers := admin.NewSCMOAuthHandlers(cfg, scmRepo, userRepo, tokenCipher)
@@ -140,11 +146,17 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	scmPublisher := services.NewSCMPublisher(scmRepo, moduleRepo, storageBackend, tokenCipher)
 	scmWebhookHandler := webhooks.NewSCMWebhookHandler(scmRepo, scmPublisher)
 
+	// Initialize rate limiters
+	authRateLimiter := middleware.NewRateLimiter(middleware.AuthRateLimitConfig())
+	generalRateLimiter := middleware.NewRateLimiter(middleware.DefaultRateLimitConfig())
+	uploadRateLimiter := middleware.NewRateLimiter(middleware.UploadRateLimitConfig())
+
 	// Admin API endpoints
 	apiV1 := router.Group("/api/v1")
 	{
-		// Public authentication endpoints (no auth required)
+		// Public authentication endpoints (no auth required, but rate limited)
 		authGroup := apiV1.Group("/auth")
+		authGroup.Use(middleware.RateLimitMiddleware(authRateLimiter))
 		{
 			authGroup.GET("/login", authHandlers.LoginHandler())
 			authGroup.GET("/callback", authHandlers.CallbackHandler())
@@ -152,7 +164,8 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 
 		// Authenticated-only endpoints
 		authenticatedGroup := apiV1.Group("")
-		authenticatedGroup.Use(middleware.AuthMiddleware(cfg, userRepo, apiKeyRepo))
+		authenticatedGroup.Use(middleware.AuthMiddleware(cfg, userRepo, apiKeyRepo, orgRepo))
+		authenticatedGroup.Use(middleware.RateLimitMiddleware(generalRateLimiter))
 		authenticatedGroup.Use(middleware.AuditMiddleware(auditRepo)) // Audit all authenticated actions
 		{
 			// Auth endpoints (require auth)
@@ -164,6 +177,7 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 
 			// Modules admin endpoints - require write permissions
 			authenticatedGroup.POST("/modules",
+				middleware.RateLimitMiddleware(uploadRateLimiter), // Stricter rate limit for uploads
 				middleware.RequireScope(auth.ScopeModulesWrite),
 				modules.UploadHandler(db, storageBackend, cfg))
 			authenticatedGroup.GET("/modules/search",
@@ -172,6 +186,7 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 
 			// Providers admin endpoints - require write permissions
 			authenticatedGroup.POST("/providers",
+				middleware.RateLimitMiddleware(uploadRateLimiter), // Stricter rate limit for uploads
 				middleware.RequireScope(auth.ScopeProvidersWrite),
 				providers.UploadHandler(db, storageBackend, cfg))
 			authenticatedGroup.GET("/providers/search",
@@ -210,24 +225,31 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 				middleware.RequireScope(auth.ScopeModulesWrite),
 				moduleAdminHandlers.UndeprecateVersion)
 
-			// API Keys management
+			// API Keys management - self-service for own keys
+			// Users can manage their own API keys without api_keys:manage scope
+			// The handlers verify ownership; api_keys:manage is only needed for managing others' keys
 			apiKeysGroup := authenticatedGroup.Group("/apikeys")
-			apiKeysGroup.Use(middleware.RequireScope(auth.ScopeAPIKeysManage))
 			{
 				apiKeysGroup.GET("", apiKeyHandlers.ListAPIKeysHandler())
 				apiKeysGroup.POST("", apiKeyHandlers.CreateAPIKeyHandler())
 				apiKeysGroup.GET("/:id", apiKeyHandlers.GetAPIKeyHandler())
 				apiKeysGroup.PUT("/:id", apiKeyHandlers.UpdateAPIKeyHandler())
 				apiKeysGroup.DELETE("/:id", apiKeyHandlers.DeleteAPIKeyHandler())
+				apiKeysGroup.POST("/:id/rotate", apiKeyHandlers.RotateAPIKeyHandler())
 			}
 
-			// Users management (admin only)
+			// Self-service user endpoints (any authenticated user)
+			// These endpoints allow users to access their own data without special scopes
+			authenticatedGroup.GET("/users/me/memberships", userHandlers.GetCurrentUserMembershipsHandler())
+
+			// Users management (requires users:read scope for viewing others)
 			usersGroup := authenticatedGroup.Group("/users")
 			usersGroup.Use(middleware.RequireScope(auth.ScopeUsersRead))
 			{
 				usersGroup.GET("", userHandlers.ListUsersHandler())
 				usersGroup.GET("/search", userHandlers.SearchUsersHandler())
 				usersGroup.GET("/:id", userHandlers.GetUserHandler())
+				usersGroup.GET("/:id/memberships", userHandlers.GetUserMembershipsHandler())
 			}
 
 			usersWriteGroup := authenticatedGroup.Group("/users")
@@ -241,35 +263,39 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 			// Organizations management
 			orgsGroup := authenticatedGroup.Group("/organizations")
 			{
-				orgsGroup.GET("", orgHandlers.ListOrganizationsHandler())
-				orgsGroup.GET("/search", orgHandlers.SearchOrganizationsHandler())
-				orgsGroup.GET("/:id", orgHandlers.GetOrganizationHandler())
+				// Read operations require organizations:read
+				orgsGroup.GET("", middleware.RequireScope(auth.ScopeOrganizationsRead), orgHandlers.ListOrganizationsHandler())
+				orgsGroup.GET("/search", middleware.RequireScope(auth.ScopeOrganizationsRead), orgHandlers.SearchOrganizationsHandler())
+				orgsGroup.GET("/:id", middleware.RequireScope(auth.ScopeOrganizationsRead), orgHandlers.GetOrganizationHandler())
+				orgsGroup.GET("/:id/members", middleware.RequireScope(auth.ScopeOrganizationsRead), orgHandlers.ListMembersHandler())
 
-				// Create/update/delete require admin scope
-				orgsGroup.POST("", middleware.RequireScope(auth.ScopeAdmin), orgHandlers.CreateOrganizationHandler())
-				orgsGroup.PUT("/:id", middleware.RequireScope(auth.ScopeAdmin), orgHandlers.UpdateOrganizationHandler())
-				orgsGroup.DELETE("/:id", middleware.RequireScope(auth.ScopeAdmin), orgHandlers.DeleteOrganizationHandler())
+				// Create/update/delete require organizations:write
+				orgsGroup.POST("", middleware.RequireScope(auth.ScopeOrganizationsWrite), orgHandlers.CreateOrganizationHandler())
+				orgsGroup.PUT("/:id", middleware.RequireScope(auth.ScopeOrganizationsWrite), orgHandlers.UpdateOrganizationHandler())
+				orgsGroup.DELETE("/:id", middleware.RequireScope(auth.ScopeOrganizationsWrite), orgHandlers.DeleteOrganizationHandler())
 
-				// Member management
-				orgsGroup.POST("/:id/members", middleware.RequireScope(auth.ScopeAdmin), orgHandlers.AddMemberHandler())
-				orgsGroup.PUT("/:id/members/:user_id", middleware.RequireScope(auth.ScopeAdmin), orgHandlers.UpdateMemberHandler())
-				orgsGroup.DELETE("/:id/members/:user_id", middleware.RequireScope(auth.ScopeAdmin), orgHandlers.RemoveMemberHandler())
+				// Member management requires organizations:write
+				orgsGroup.POST("/:id/members", middleware.RequireScope(auth.ScopeOrganizationsWrite), orgHandlers.AddMemberHandler())
+				orgsGroup.PUT("/:id/members/:user_id", middleware.RequireScope(auth.ScopeOrganizationsWrite), orgHandlers.UpdateMemberHandler())
+				orgsGroup.DELETE("/:id/members/:user_id", middleware.RequireScope(auth.ScopeOrganizationsWrite), orgHandlers.RemoveMemberHandler())
 			}
 
 			// SCM Provider management
 			scmProvidersGroup := authenticatedGroup.Group("/scm-providers")
-			scmProvidersGroup.Use(middleware.RequireScope(auth.ScopeAdmin))
 			{
-				scmProvidersGroup.GET("", scmProviderHandlers.ListProviders)
-				scmProvidersGroup.POST("", scmProviderHandlers.CreateProvider)
-				scmProvidersGroup.GET("/:id", scmProviderHandlers.GetProvider)
-				scmProvidersGroup.PUT("/:id", scmProviderHandlers.UpdateProvider)
-				scmProvidersGroup.DELETE("/:id", scmProviderHandlers.DeleteProvider)
+				// Read operations require scm:read
+				scmProvidersGroup.GET("", middleware.RequireScope(auth.ScopeSCMRead), scmProviderHandlers.ListProviders)
+				scmProvidersGroup.GET("/:id", middleware.RequireScope(auth.ScopeSCMRead), scmProviderHandlers.GetProvider)
 
-				// OAuth flow endpoints (user-level, not admin-only)
-				scmProvidersGroup.GET("/:id/oauth/authorize", scmOAuthHandlers.InitiateOAuth)
-				scmProvidersGroup.DELETE("/:id/oauth/token", scmOAuthHandlers.RevokeOAuth)
-				scmProvidersGroup.POST("/:id/oauth/refresh", scmOAuthHandlers.RefreshToken)
+				// Management operations require scm:manage
+				scmProvidersGroup.POST("", middleware.RequireScope(auth.ScopeSCMManage), scmProviderHandlers.CreateProvider)
+				scmProvidersGroup.PUT("/:id", middleware.RequireScope(auth.ScopeSCMManage), scmProviderHandlers.UpdateProvider)
+				scmProvidersGroup.DELETE("/:id", middleware.RequireScope(auth.ScopeSCMManage), scmProviderHandlers.DeleteProvider)
+
+				// OAuth flow endpoints require scm:manage
+				scmProvidersGroup.GET("/:id/oauth/authorize", middleware.RequireScope(auth.ScopeSCMManage), scmOAuthHandlers.InitiateOAuth)
+				scmProvidersGroup.DELETE("/:id/oauth/token", middleware.RequireScope(auth.ScopeSCMManage), scmOAuthHandlers.RevokeOAuth)
+				scmProvidersGroup.POST("/:id/oauth/refresh", middleware.RequireScope(auth.ScopeSCMManage), scmOAuthHandlers.RefreshToken)
 			}
 
 			// SCM OAuth callback (public endpoint, no auth required)
@@ -303,6 +329,50 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 				mirrorsGroup.DELETE("/:id", middleware.RequireScope(auth.ScopeMirrorsManage), mirrorHandlers.DeleteMirrorConfig)
 				mirrorsGroup.POST("/:id/sync", middleware.RequireScope(auth.ScopeMirrorsManage), mirrorHandlers.TriggerSync)
 			}
+
+			// Role Templates management
+			roleTemplatesGroup := authenticatedGroup.Group("/admin/role-templates")
+			{
+				roleTemplatesGroup.GET("", rbacHandlers.ListRoleTemplates)
+				roleTemplatesGroup.GET("/:id", rbacHandlers.GetRoleTemplate)
+				roleTemplatesGroup.POST("", middleware.RequireScope(auth.ScopeAdmin), rbacHandlers.CreateRoleTemplate)
+				roleTemplatesGroup.PUT("/:id", middleware.RequireScope(auth.ScopeAdmin), rbacHandlers.UpdateRoleTemplate)
+				roleTemplatesGroup.DELETE("/:id", middleware.RequireScope(auth.ScopeAdmin), rbacHandlers.DeleteRoleTemplate)
+			}
+
+			// Mirror Approval Requests
+			approvalsGroup := authenticatedGroup.Group("/admin/approvals")
+			{
+				approvalsGroup.GET("", middleware.RequireScope(auth.ScopeMirrorsRead), rbacHandlers.ListApprovalRequests)
+				approvalsGroup.GET("/:id", middleware.RequireScope(auth.ScopeMirrorsRead), rbacHandlers.GetApprovalRequest)
+				approvalsGroup.POST("", middleware.RequireScope(auth.ScopeMirrorsManage), rbacHandlers.CreateApprovalRequest)
+				approvalsGroup.PUT("/:id/review", middleware.RequireScope(auth.ScopeAdmin), rbacHandlers.ReviewApproval)
+			}
+
+			// Mirror Policies
+			policiesGroup := authenticatedGroup.Group("/admin/policies")
+			{
+				policiesGroup.GET("", middleware.RequireScope(auth.ScopeMirrorsRead), rbacHandlers.ListMirrorPolicies)
+				policiesGroup.GET("/:id", middleware.RequireScope(auth.ScopeMirrorsRead), rbacHandlers.GetMirrorPolicy)
+				policiesGroup.POST("", middleware.RequireScope(auth.ScopeAdmin), rbacHandlers.CreateMirrorPolicy)
+				policiesGroup.PUT("/:id", middleware.RequireScope(auth.ScopeAdmin), rbacHandlers.UpdateMirrorPolicy)
+				policiesGroup.DELETE("/:id", middleware.RequireScope(auth.ScopeAdmin), rbacHandlers.DeleteMirrorPolicy)
+				policiesGroup.POST("/evaluate", middleware.RequireScope(auth.ScopeMirrorsRead), rbacHandlers.EvaluatePolicy)
+			}
+		}
+
+		// Development-only endpoints (guarded by DevModeMiddleware)
+		devGroup := apiV1.Group("/dev")
+		devGroup.Use(admin.DevModeMiddleware())
+		{
+			devHandlers := admin.NewDevHandlers(cfg, db)
+			// Status endpoint (no auth required, but must be in dev mode)
+			devGroup.GET("/status", devHandlers.DevStatusHandler())
+
+			// Impersonation endpoints (require auth + admin scope)
+			devGroup.Use(middleware.AuthMiddleware(cfg, userRepo, apiKeyRepo, orgRepo))
+			devGroup.GET("/users", devHandlers.ListUsersForImpersonationHandler())
+			devGroup.POST("/impersonate/:user_id", devHandlers.ImpersonateUserHandler())
 		}
 	}
 

@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 	"time"
@@ -89,9 +90,10 @@ func DownloadHandler(db *sql.DB, storageBackend storage.Storage, cfg *config.Con
 		}
 
 		// Increment download counter asynchronously (don't block the response)
+		versionID := moduleVersion.ID
 		go func() {
 			// Use background context to avoid cancellation when request completes
-			if err := moduleRepo.IncrementDownloadCount(c.Request.Context(), moduleVersion.ID); err != nil {
+			if err := moduleRepo.IncrementDownloadCount(context.Background(), versionID); err != nil {
 				// Log error but don't fail the request
 				// TODO: Add proper logging in Phase 9
 			}

@@ -66,9 +66,11 @@ func (h *ModuleAdminHandlers) GetModule(c *gin.Context) {
 		return
 	}
 
-	// Format versions
+	// Format versions and calculate total downloads
 	versionsList := make([]gin.H, 0, len(versions))
+	var totalDownloads int64
 	for _, v := range versions {
+		totalDownloads += v.DownloadCount
 		versionData := gin.H{
 			"id":             v.ID,
 			"version":        v.Version,
@@ -88,15 +90,16 @@ func (h *ModuleAdminHandlers) GetModule(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":          module.ID,
-		"namespace":   module.Namespace,
-		"name":        module.Name,
-		"system":      module.System,
-		"description": module.Description,
-		"source":      module.Source,
-		"versions":    versionsList,
-		"created_at":  module.CreatedAt,
-		"updated_at":  module.UpdatedAt,
+		"id":             module.ID,
+		"namespace":      module.Namespace,
+		"name":           module.Name,
+		"system":         module.System,
+		"description":    module.Description,
+		"source":         module.Source,
+		"download_count": totalDownloads,
+		"versions":       versionsList,
+		"created_at":     module.CreatedAt,
+		"updated_at":     module.UpdatedAt,
 	})
 }
 

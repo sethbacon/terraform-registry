@@ -335,12 +335,12 @@ func (h *AuthHandlers) RefreshHandler() gin.HandlerFunc {
 	}
 }
 
-// MeHandler returns the current authenticated user's information
+// MeHandler returns the current authenticated user's information including per-org role templates
 // GET /api/v1/auth/me
 func (h *AuthHandlers) MeHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Get user from context
-		userVal, exists := c.Get("user")
+		// Get user ID from context
+		userIDVal, exists := c.Get("user_id")
 		if !exists {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": "User not authenticated",
@@ -348,8 +348,79 @@ func (h *AuthHandlers) MeHandler() gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
-			"user": userVal,
-		})
+		userID, ok := userIDVal.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Invalid user ID format",
+			})
+			return
+		}
+
+		// Get user with per-organization role template information
+		userWithRoles, err := h.userRepo.GetUserWithOrgRoles(c.Request.Context(), userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to get user information",
+			})
+			return
+		}
+
+		if userWithRoles == nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "User not found",
+			})
+			return
+		}
+
+		// Build response with user info and per-org role templates
+		response := gin.H{
+			"user": gin.H{
+				"id":         userWithRoles.ID,
+				"email":      userWithRoles.Email,
+				"name":       userWithRoles.Name,
+				"created_at": userWithRoles.CreatedAt,
+				"updated_at": userWithRoles.UpdatedAt,
+			},
+		}
+
+		// Build per-org memberships with role templates
+		memberships := make([]gin.H, 0, len(userWithRoles.Memberships))
+		for _, m := range userWithRoles.Memberships {
+			membership := gin.H{
+				"organization_id":   m.OrganizationID,
+				"organization_name": m.OrganizationName,
+				"created_at":        m.CreatedAt,
+			}
+			if m.RoleTemplateID != nil {
+				membership["role_template"] = gin.H{
+					"id":           m.RoleTemplateID,
+					"name":         m.RoleTemplateName,
+					"display_name": m.RoleTemplateDisplayName,
+					"scopes":       m.RoleTemplateScopes,
+				}
+			} else {
+				membership["role_template"] = nil
+			}
+			memberships = append(memberships, membership)
+		}
+		response["memberships"] = memberships
+
+		// Calculate combined allowed scopes across all organizations
+		// and provide a "primary" role template (highest privilege) for backward compatibility
+		response["allowed_scopes"] = userWithRoles.GetAllowedScopes()
+
+		// For backward compatibility, provide the first membership's role template as primary
+		// In a multi-org setup, the frontend should use per-org memberships
+		if len(userWithRoles.Memberships) > 0 && userWithRoles.Memberships[0].RoleTemplateID != nil {
+			m := userWithRoles.Memberships[0]
+			response["role_template"] = gin.H{
+				"name":         m.RoleTemplateName,
+				"display_name": m.RoleTemplateDisplayName,
+			}
+		} else {
+			response["role_template"] = nil
+		}
+
+		c.JSON(http.StatusOK, response)
 	}
 }

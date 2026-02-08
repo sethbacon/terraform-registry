@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -335,4 +336,71 @@ func (r *UserRepository) Search(ctx context.Context, query string, limit, offset
 // GetOrCreateUserByOIDC is an alias for GetOrCreateUserFromOIDC
 func (r *UserRepository) GetOrCreateUserByOIDC(ctx context.Context, oidcSub, email, name string) (*models.User, error) {
 	return r.GetOrCreateUserFromOIDC(ctx, oidcSub, email, name)
+}
+
+// GetUserWithOrgRoles retrieves a user with their per-organization role template information
+func (r *UserRepository) GetUserWithOrgRoles(ctx context.Context, userID string) (*models.UserWithOrgRoles, error) {
+	// First get the basic user info
+	user, err := r.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, nil
+	}
+
+	// Then get all memberships with role templates
+	query := `
+		SELECT om.organization_id, COALESCE(o.name, '') as organization_name,
+		       om.role_template_id, om.created_at,
+		       rt.name as role_template_name, rt.display_name as role_template_display_name,
+		       COALESCE(rt.scopes, '[]'::jsonb) as role_template_scopes
+		FROM organization_members om
+		LEFT JOIN organizations o ON om.organization_id = o.id
+		LEFT JOIN role_templates rt ON om.role_template_id = rt.id
+		WHERE om.user_id = $1
+		ORDER BY om.created_at DESC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	memberships := make([]models.UserMembership, 0)
+	for rows.Next() {
+		m := models.UserMembership{}
+		var scopesJSON []byte
+		err := rows.Scan(
+			&m.OrganizationID,
+			&m.OrganizationName,
+			&m.RoleTemplateID,
+			&m.CreatedAt,
+			&m.RoleTemplateName,
+			&m.RoleTemplateDisplayName,
+			&scopesJSON,
+		)
+		if err != nil {
+			return nil, err
+		}
+		// Parse scopes JSON
+		if len(scopesJSON) > 0 {
+			if err := json.Unmarshal(scopesJSON, &m.RoleTemplateScopes); err != nil {
+				return nil, err
+			}
+		}
+		memberships = append(memberships, m)
+	}
+
+	return &models.UserWithOrgRoles{
+		User:        *user,
+		Memberships: memberships,
+	}, rows.Err()
+}
+
+// ListUsersWithRoles is deprecated - use ListUsers instead
+// Role templates are now per-organization, not per-user
+func (r *UserRepository) ListUsersWithRoles(ctx context.Context, limit, offset int) ([]*models.User, int, error) {
+	return r.ListUsers(ctx, limit, offset)
 }

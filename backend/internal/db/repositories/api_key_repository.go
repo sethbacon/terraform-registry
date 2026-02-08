@@ -32,8 +32,8 @@ func (r *APIKeyRepository) CreateAPIKey(ctx context.Context, apiKey *models.APIK
 	}
 
 	query := `
-		INSERT INTO api_keys (id, user_id, organization_id, name, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO api_keys (id, user_id, organization_id, name, description, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`
 
 	_, err = r.db.ExecContext(ctx, query,
@@ -41,6 +41,7 @@ func (r *APIKeyRepository) CreateAPIKey(ctx context.Context, apiKey *models.APIK
 		apiKey.UserID,
 		apiKey.OrganizationID,
 		apiKey.Name,
+		apiKey.Description,
 		apiKey.KeyHash,
 		apiKey.KeyPrefix,
 		scopesJSON,
@@ -55,7 +56,7 @@ func (r *APIKeyRepository) CreateAPIKey(ctx context.Context, apiKey *models.APIK
 // GetAPIKeyByHash retrieves an API key by its hash (for authentication)
 func (r *APIKeyRepository) GetAPIKeyByHash(ctx context.Context, keyHash string) (*models.APIKey, error) {
 	query := `
-		SELECT id, user_id, organization_id, name, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at
+		SELECT id, user_id, organization_id, name, description, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at
 		FROM api_keys
 		WHERE key_hash = $1
 	`
@@ -68,6 +69,7 @@ func (r *APIKeyRepository) GetAPIKeyByHash(ctx context.Context, keyHash string) 
 		&apiKey.UserID,
 		&apiKey.OrganizationID,
 		&apiKey.Name,
+		&apiKey.Description,
 		&apiKey.KeyHash,
 		&apiKey.KeyPrefix,
 		&scopesJSON,
@@ -96,7 +98,7 @@ func (r *APIKeyRepository) GetAPIKeyByHash(ctx context.Context, keyHash string) 
 // GetAPIKeyByID retrieves an API key by ID
 func (r *APIKeyRepository) GetAPIKeyByID(ctx context.Context, keyID string) (*models.APIKey, error) {
 	query := `
-		SELECT id, user_id, organization_id, name, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at
+		SELECT id, user_id, organization_id, name, description, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at
 		FROM api_keys
 		WHERE id = $1
 	`
@@ -109,6 +111,7 @@ func (r *APIKeyRepository) GetAPIKeyByID(ctx context.Context, keyID string) (*mo
 		&apiKey.UserID,
 		&apiKey.OrganizationID,
 		&apiKey.Name,
+		&apiKey.Description,
 		&apiKey.KeyHash,
 		&apiKey.KeyPrefix,
 		&scopesJSON,
@@ -137,10 +140,12 @@ func (r *APIKeyRepository) GetAPIKeyByID(ctx context.Context, keyID string) (*mo
 // ListAPIKeysByUser retrieves all API keys for a user
 func (r *APIKeyRepository) ListAPIKeysByUser(ctx context.Context, userID string) ([]*models.APIKey, error) {
 	query := `
-		SELECT id, user_id, organization_id, name, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at
-		FROM api_keys
-		WHERE user_id = $1
-		ORDER BY created_at DESC
+		SELECT ak.id, ak.user_id, ak.organization_id, ak.name, ak.description, ak.key_hash, ak.key_prefix, ak.scopes,
+		       ak.expires_at, ak.last_used_at, ak.created_at, u.name as user_name
+		FROM api_keys ak
+		LEFT JOIN users u ON ak.user_id = u.id
+		WHERE ak.user_id = $1
+		ORDER BY ak.created_at DESC
 	`
 
 	rows, err := r.db.QueryContext(ctx, query, userID)
@@ -159,12 +164,14 @@ func (r *APIKeyRepository) ListAPIKeysByUser(ctx context.Context, userID string)
 			&apiKey.UserID,
 			&apiKey.OrganizationID,
 			&apiKey.Name,
+			&apiKey.Description,
 			&apiKey.KeyHash,
 			&apiKey.KeyPrefix,
 			&scopesJSON,
 			&apiKey.ExpiresAt,
 			&apiKey.LastUsedAt,
 			&apiKey.CreatedAt,
+			&apiKey.UserName,
 		)
 		if err != nil {
 			return nil, err
@@ -185,10 +192,12 @@ func (r *APIKeyRepository) ListAPIKeysByUser(ctx context.Context, userID string)
 // ListAPIKeysByOrganization retrieves all API keys for an organization
 func (r *APIKeyRepository) ListAPIKeysByOrganization(ctx context.Context, orgID string) ([]*models.APIKey, error) {
 	query := `
-		SELECT id, user_id, organization_id, name, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at
-		FROM api_keys
-		WHERE organization_id = $1
-		ORDER BY created_at DESC
+		SELECT ak.id, ak.user_id, ak.organization_id, ak.name, ak.description, ak.key_hash, ak.key_prefix, ak.scopes,
+		       ak.expires_at, ak.last_used_at, ak.created_at, u.name as user_name
+		FROM api_keys ak
+		LEFT JOIN users u ON ak.user_id = u.id
+		WHERE ak.organization_id = $1
+		ORDER BY ak.created_at DESC
 	`
 
 	rows, err := r.db.QueryContext(ctx, query, orgID)
@@ -207,12 +216,14 @@ func (r *APIKeyRepository) ListAPIKeysByOrganization(ctx context.Context, orgID 
 			&apiKey.UserID,
 			&apiKey.OrganizationID,
 			&apiKey.Name,
+			&apiKey.Description,
 			&apiKey.KeyHash,
 			&apiKey.KeyPrefix,
 			&scopesJSON,
 			&apiKey.ExpiresAt,
 			&apiKey.LastUsedAt,
 			&apiKey.CreatedAt,
+			&apiKey.UserName,
 		)
 		if err != nil {
 			return nil, err
@@ -263,7 +274,7 @@ func (r *APIKeyRepository) DeleteExpiredKeys(ctx context.Context) error {
 // GetAPIKeysByPrefix retrieves API keys matching a prefix (for authentication)
 func (r *APIKeyRepository) GetAPIKeysByPrefix(ctx context.Context, keyPrefix string) ([]*models.APIKey, error) {
 	query := `
-		SELECT id, user_id, organization_id, name, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at
+		SELECT id, user_id, organization_id, name, description, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at
 		FROM api_keys
 		WHERE key_prefix = $1
 		ORDER BY created_at DESC
@@ -285,6 +296,7 @@ func (r *APIKeyRepository) GetAPIKeysByPrefix(ctx context.Context, keyPrefix str
 			&apiKey.UserID,
 			&apiKey.OrganizationID,
 			&apiKey.Name,
+			&apiKey.Description,
 			&apiKey.KeyHash,
 			&apiKey.KeyPrefix,
 			&scopesJSON,
@@ -328,13 +340,14 @@ func (r *APIKeyRepository) Update(ctx context.Context, apiKey *models.APIKey) er
 
 	query := `
 		UPDATE api_keys
-		SET name = $2, scopes = $3, expires_at = $4
+		SET name = $2, description = $3, scopes = $4, expires_at = $5
 		WHERE id = $1
 	`
 
 	_, err = r.db.ExecContext(ctx, query,
 		apiKey.ID,
 		apiKey.Name,
+		apiKey.Description,
 		scopesJSON,
 		apiKey.ExpiresAt,
 	)
@@ -355,4 +368,107 @@ func (r *APIKeyRepository) ListByUser(ctx context.Context, userID string) ([]*mo
 // ListByOrganization is an alias for ListAPIKeysByOrganization to match admin handlers
 func (r *APIKeyRepository) ListByOrganization(ctx context.Context, orgID string) ([]*models.APIKey, error) {
 	return r.ListAPIKeysByOrganization(ctx, orgID)
+}
+
+// ListByUserAndOrganization retrieves API keys for a specific user within a specific organization
+func (r *APIKeyRepository) ListByUserAndOrganization(ctx context.Context, userID, orgID string) ([]*models.APIKey, error) {
+	query := `
+		SELECT ak.id, ak.user_id, ak.organization_id, ak.name, ak.description, ak.key_hash, ak.key_prefix, ak.scopes,
+		       ak.expires_at, ak.last_used_at, ak.created_at, u.name as user_name
+		FROM api_keys ak
+		LEFT JOIN users u ON ak.user_id = u.id
+		WHERE ak.user_id = $1 AND ak.organization_id = $2
+		ORDER BY ak.created_at DESC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, userID, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	apiKeys := make([]*models.APIKey, 0)
+	for rows.Next() {
+		apiKey := &models.APIKey{}
+		var scopesJSON []byte
+
+		err := rows.Scan(
+			&apiKey.ID,
+			&apiKey.UserID,
+			&apiKey.OrganizationID,
+			&apiKey.Name,
+			&apiKey.Description,
+			&apiKey.KeyHash,
+			&apiKey.KeyPrefix,
+			&scopesJSON,
+			&apiKey.ExpiresAt,
+			&apiKey.LastUsedAt,
+			&apiKey.CreatedAt,
+			&apiKey.UserName,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Unmarshal scopes from JSONB
+		err = json.Unmarshal(scopesJSON, &apiKey.Scopes)
+		if err != nil {
+			return nil, err
+		}
+
+		apiKeys = append(apiKeys, apiKey)
+	}
+
+	return apiKeys, rows.Err()
+}
+
+// ListAll retrieves all API keys across all organizations (for admin use)
+func (r *APIKeyRepository) ListAll(ctx context.Context) ([]*models.APIKey, error) {
+	query := `
+		SELECT ak.id, ak.user_id, ak.organization_id, ak.name, ak.description, ak.key_hash, ak.key_prefix, ak.scopes,
+		       ak.expires_at, ak.last_used_at, ak.created_at, u.name as user_name
+		FROM api_keys ak
+		LEFT JOIN users u ON ak.user_id = u.id
+		ORDER BY ak.created_at DESC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	allKeys := make([]*models.APIKey, 0)
+	for rows.Next() {
+		apiKey := &models.APIKey{}
+		var scopesJSON []byte
+
+		err := rows.Scan(
+			&apiKey.ID,
+			&apiKey.UserID,
+			&apiKey.OrganizationID,
+			&apiKey.Name,
+			&apiKey.Description,
+			&apiKey.KeyHash,
+			&apiKey.KeyPrefix,
+			&scopesJSON,
+			&apiKey.ExpiresAt,
+			&apiKey.LastUsedAt,
+			&apiKey.CreatedAt,
+			&apiKey.UserName,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Unmarshal scopes from JSONB
+		err = json.Unmarshal(scopesJSON, &apiKey.Scopes)
+		if err != nil {
+			return nil, err
+		}
+
+		allKeys = append(allKeys, apiKey)
+	}
+
+	return allKeys, rows.Err()
 }

@@ -42,12 +42,15 @@ A fully-featured, enterprise-grade Terraform registry implementing all three Has
 #### Provider Mirroring
 
 - **Upstream Registry Client** - Mirror providers from registry.terraform.io
-- **Automated Sync** - Scheduled synchronization of provider versions
+- **Automated Sync** - Scheduled synchronization of provider versions (10-minute intervals)
 - **Configurable Filters** - Namespace and provider-specific mirroring
 - **Sync History** - Track mirror operations and status
-- **Manual Triggers** - On-demand synchronization
-- ⏳ GPG Signature Verification (planned - Session 15/16)
-- ⏳ Enhanced RBAC for mirrors (planned - Session 15)
+- **Manual Triggers** - On-demand synchronization via UI or API
+- **GPG Signature Verification** - Cryptographic validation of provider binaries
+- **SHA256 Checksums** - File integrity verification for all downloads
+- **Enhanced RBAC** - Mirror-specific scopes (mirrors:read, mirrors:manage)
+- **Audit Logging** - Full tracking of all mirror operations
+- **Mirror Management UI** - Complete admin interface for mirror configuration
 
 #### Storage Backends
 
@@ -76,31 +79,20 @@ A fully-featured, enterprise-grade Terraform registry implementing all three Has
 - **Audit Logging** - Comprehensive activity tracking
 - **Rate Limiting** - API protection (coming soon)
 
-### ⏳ In Progress
-
-#### SCM Integration (Phase 5A - Sessions 10-13)
-
-- **Git Provider Support** - GitHub, Azure DevOps, GitLab integration
-- **OAuth 2.0 Flows** - Secure repository access
-- **Automated Publishing** - Tag-triggered module releases
-- **Commit-Pinned Versions** - Immutable version security
-- **Webhook Handlers** - Real-time update processing
-- **Tag Movement Detection** - Supply chain attack prevention
-
 ### 📋 Planned
 
-#### Azure DevOps Extension (Phase 5B)
+#### Additional Storage Backends (Phase 6 - Next)
+
+- Azure Blob Storage backend with SAS token support
+- S3-compatible storage backend (AWS S3, MinIO)
+- Kubernetes Helm charts
+- Azure Container Apps configuration
+
+#### Azure DevOps Extension (Phase 5B - Deferred)
 
 - Custom pipeline task for publishing
 - OIDC authentication with workload identity
 - Visual Studio Marketplace distribution
-
-#### Additional Storage & Deployment (Phase 6)
-
-- Azure Blob Storage backend
-- S3-compatible storage backend
-- Kubernetes Helm charts
-- Azure Container Apps configuration
 
 #### Documentation & Testing (Phase 7)
 
@@ -166,10 +158,10 @@ git clone https://github.com/yourusername/terraform-registry.git
 cd terraform-registry
 
 # Start all services
+cd deployments
 docker-compose up -d
 
 # Backend: http://localhost:8080
-# Frontend: http://localhost:3000
 # PostgreSQL: localhost:5432
 ```
 
@@ -188,7 +180,7 @@ cp config.example.yaml config.yaml
 # Edit config.yaml with your settings
 
 # Run database migrations
-go run cmd/server/main.go migrate
+go run cmd/server/main.go migrate up
 
 # Start the server
 go run cmd/server/main.go serve
@@ -215,30 +207,34 @@ npm run build
 
 ```bash
 # Database
-export DB_HOST=localhost
-export DB_PORT=5432
-export DB_USER=terraform_registry
-export DB_PASSWORD=your_password
-export DB_NAME=terraform_registry
+export TFR_DATABASE_HOST=localhost
+export TFR_DATABASE_PORT=5432
+export TFR_DATABASE_USER=registry
+export TFR_DATABASE_PASSWORD=your_password
+export TFR_DATABASE_NAME=terraform_registry
+export TFR_DATABASE_SSL_MODE=disable
 
 # Server
-export SERVER_PORT=8080
-export SERVER_HOST=0.0.0.0
+export TFR_SERVER_PORT=8080
+export TFR_SERVER_HOST=0.0.0.0
+export TFR_SERVER_BASE_URL=http://localhost:8080
 
 # Storage
-export STORAGE_BACKEND=local
-export STORAGE_LOCAL_PATH=/var/lib/terraform-registry
+export TFR_STORAGE_DEFAULT_BACKEND=local
+export TFR_STORAGE_LOCAL_BASE_PATH=/var/lib/terraform-registry
+export TFR_STORAGE_LOCAL_SERVE_DIRECTLY=true
 
 # Authentication
-export JWT_SECRET=your_jwt_secret_here
-export OIDC_ISSUER_URL=https://your-idp.com
-export OIDC_CLIENT_ID=your_client_id
-export OIDC_CLIENT_SECRET=your_client_secret
+export TFR_AUTH_API_KEYS_ENABLED=true
+export TFR_AUTH_OIDC_ENABLED=false
+export TFR_AUTH_AZURE_AD_ENABLED=false
 
-# Azure AD (optional)
-export AZURE_AD_TENANT_ID=your_tenant_id
-export AZURE_AD_CLIENT_ID=your_client_id
-export AZURE_AD_CLIENT_SECRET=your_client_secret
+# Multi-tenancy
+export TFR_MULTI_TENANCY_ENABLED=false
+export TFR_MULTI_TENANCY_DEFAULT_ORGANIZATION=default
+
+# SCM Integration (optional)
+export ENCRYPTION_KEY=your_32_byte_encryption_key_here
 ```
 
 ### Configuration File
@@ -340,24 +336,24 @@ npm run build
 
 ## 🗺️ Roadmap
 
-### Current: Phase 5A - SCM Integration (Sessions 10-13)
+### Current: Phase 6 - Storage Backends (Sessions 16-19)
 
-- OAuth integration with GitHub, Azure DevOps, GitLab
-- Repository browsing and selection
-- Automated tag-based publishing
-- Commit-pinned immutable versions
+- Azure Blob Storage implementation
+- S3-compatible storage implementation
+- Kubernetes and Helm deployment configurations
+- Azure Container Apps configuration
 
-### Next: Phase 5B - Azure DevOps Extension (Sessions 14-16)
+### Next: Phase 7 - Documentation & Testing (Sessions 20-22)
 
-- Custom pipeline task
-- OIDC authentication
-- Marketplace publication
+- Comprehensive API documentation
+- Unit and integration tests (80%+ coverage)
+- End-to-end test suite
+- Performance benchmarks
 
 ### Future Phases
 
-- Additional storage backends (Azure Blob, S3)
-- Comprehensive documentation and testing
-- Production hardening and optimization
+- Phase 8: Production polish (monitoring, observability, security hardening)
+- Phase 5B: Azure DevOps Extension (deferred based on demand)
 
 ## 🤝 Contributing
 
@@ -376,7 +372,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📊 Project Status
 
-**Current Version:** 0.5.0 (Session 9 Complete)
+**Current Version:** 0.9.0 (Session 15 Complete)
 
 **Implementation Progress:**
 
@@ -385,9 +381,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - ✅ Phase 3: Provider Registry & Network Mirror (100%)
 - ✅ Phase 4: Authentication & Authorization (100%)
 - ✅ Phase 5: Frontend SPA (100%)
-- ⏳ Phase 5A: SCM Integration (0% - Starting Session 10)
-- 📋 Phase 5B: Azure DevOps Extension (Planned)
-- 📋 Phase 6: Additional Storage & Deployment (Planned)
+- ✅ Phase 5A: SCM Integration (100%)
+- ✅ Phase 5C: Provider Network Mirroring (100%)
+- 📋 Phase 5B: Azure DevOps Extension (Deferred)
+- 📋 Phase 6: Additional Storage & Deployment (Next)
 - 📋 Phase 7: Documentation & Testing (Planned)
 - 📋 Phase 8: Production Polish (Planned)
 

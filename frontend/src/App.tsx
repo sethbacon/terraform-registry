@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
+import { CssBaseline } from '@mui/material';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import HomePage from './pages/HomePage';
@@ -16,26 +17,12 @@ import APIKeysPage from './pages/admin/APIKeysPage';
 import UploadPage from './pages/admin/UploadPage';
 import SCMProvidersPage from './pages/admin/SCMProvidersPage';
 import MirrorsPage from './pages/admin/MirrorsPage';
+import RolesPage from './pages/admin/RolesPage';
 import ProtectedRoute from './components/ProtectedRoute';
-
-const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: {
-      main: '#5C4EE5',
-    },
-    secondary: {
-      main: '#00D9C0',
-    },
-  },
-  typography: {
-    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
-  },
-});
 
 function App() {
   return (
-    <ThemeProvider theme={theme}>
+    <ThemeProvider>
       <CssBaseline />
       <AuthProvider>
         <Router>
@@ -47,23 +34,24 @@ function App() {
             {/* Layout routes */}
             <Route element={<Layout />}>
               <Route path="/" element={<HomePage />} />
-              
+
               {/* Modules */}
               <Route path="/modules" element={<ModulesPage />} />
               <Route path="/modules/:namespace/:name/:system" element={<ModuleDetailPage />} />
-              
+
               {/* Providers */}
               <Route path="/providers" element={<ProvidersPage />} />
               <Route path="/providers/:namespace/:type" element={<ProviderDetailPage />} />
-              
-              {/* Admin routes (protected) */}
+
+              {/* Admin routes (protected with scope requirements) */}
               <Route path="/admin" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-              <Route path="/admin/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
-              <Route path="/admin/organizations" element={<ProtectedRoute><OrganizationsPage /></ProtectedRoute>} />
+              <Route path="/admin/users" element={<ProtectedRoute requiredScope="users:read"><UsersPage /></ProtectedRoute>} />
+              <Route path="/admin/organizations" element={<ProtectedRoute requiredScope="organizations:read"><OrganizationsPage /></ProtectedRoute>} />
+              <Route path="/admin/roles" element={<ProtectedRoute requiredScope="users:read"><RolesPage /></ProtectedRoute>} />
               <Route path="/admin/apikeys" element={<ProtectedRoute><APIKeysPage /></ProtectedRoute>} />
-              <Route path="/admin/upload" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
-              <Route path="/admin/scm-providers" element={<ProtectedRoute><SCMProvidersPage /></ProtectedRoute>} />
-              <Route path="/admin/mirrors" element={<ProtectedRoute><MirrorsPage /></ProtectedRoute>} />
+              <Route path="/admin/upload" element={<ProtectedRoute requiredScope="modules:write"><UploadPage /></ProtectedRoute>} />
+              <Route path="/admin/scm-providers" element={<ProtectedRoute requiredScope="scm:read"><SCMProvidersPage /></ProtectedRoute>} />
+              <Route path="/admin/mirrors" element={<ProtectedRoute requiredScope="mirrors:read"><MirrorsPage /></ProtectedRoute>} />
 
               {/* Catch all */}
               <Route path="*" element={<Navigate to="/" replace />} />

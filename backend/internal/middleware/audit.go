@@ -6,24 +6,55 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/terraform-registry/terraform-registry/internal/audit"
+	"github.com/terraform-registry/terraform-registry/internal/config"
 	"github.com/terraform-registry/terraform-registry/internal/db/models"
 	"github.com/terraform-registry/terraform-registry/internal/db/repositories"
 )
 
-// AuditMiddleware logs authenticated actions
+// AuditMiddleware logs authenticated actions to the database only (backward compatible)
 func AuditMiddleware(auditRepo *repositories.AuditRepository) gin.HandlerFunc {
+	return AuditMiddlewareWithShipper(auditRepo, nil, nil)
+}
+
+// AuditMiddlewareWithShipper logs authenticated actions and ships to external destinations
+func AuditMiddlewareWithShipper(auditRepo *repositories.AuditRepository, shipper audit.Shipper, auditCfg *config.AuditConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Process request first
 		c.Next()
 
-		// Only log successful write operations
-		if c.Request.Method == "GET" || c.Request.Method == "OPTIONS" || c.Writer.Status() >= 400 {
+		// Skip OPTIONS always
+		if c.Request.Method == "OPTIONS" {
 			return
+		}
+
+		// Determine what to log based on config
+		logReadOps := auditCfg != nil && auditCfg.LogReadOperations
+		logFailedReqs := auditCfg != nil && auditCfg.LogFailedRequests
+
+		isReadOp := c.Request.Method == "GET"
+		isFailed := c.Writer.Status() >= 400
+
+		// Default behavior: only log successful write operations
+		if auditCfg == nil {
+			if isReadOp || isFailed {
+				return
+			}
+		} else {
+			// With config: check specific settings
+			if isReadOp && !logReadOps {
+				return
+			}
+			if isFailed && !logFailedReqs && isReadOp {
+				// Skip failed read operations if not configured to log them
+				return
+			}
 		}
 
 		// Extract context
 		userID, _ := c.Get("user_id")
 		orgID, _ := c.Get("organization_id")
+		authMethod, _ := c.Get("auth_method")
 
 		// Create audit log entry
 		action := fmt.Sprintf("%s %s", c.Request.Method, c.Request.URL.Path)
@@ -36,26 +67,30 @@ func AuditMiddleware(auditRepo *repositories.AuditRepository) gin.HandlerFunc {
 		}
 
 		// Set user ID if present
+		var userIDStr string
 		if userID != nil {
-			if userIDStr, ok := userID.(string); ok {
+			if uid, ok := userID.(string); ok {
+				userIDStr = uid
 				auditLog.UserID = &userIDStr
 			}
 		}
 
 		// Set organization ID if present
+		var orgIDStr string
 		if orgID != nil {
-			if orgIDStr, ok := orgID.(string); ok {
+			if oid, ok := orgID.(string); ok {
+				orgIDStr = oid
 				auditLog.OrganizationID = &orgIDStr
 			}
 		}
 
 		// Set resource type based on URL path
-		// This is a simple heuristic based on the path
+		var resourceType string
 		if contains(c.Request.URL.Path, "/modules") {
-			resourceType := "module"
+			resourceType = "module"
 			auditLog.ResourceType = &resourceType
 		} else if contains(c.Request.URL.Path, "/mirrors") {
-			resourceType := "mirror"
+			resourceType = "mirror"
 			auditLog.ResourceType = &resourceType
 			// Add specific mirror action details
 			if contains(c.Request.URL.Path, "/sync") {
@@ -69,22 +104,26 @@ func AuditMiddleware(auditRepo *repositories.AuditRepository) gin.HandlerFunc {
 			}
 			auditLog.Action = action
 		} else if contains(c.Request.URL.Path, "/providers") {
-			resourceType := "provider"
+			resourceType = "provider"
 			auditLog.ResourceType = &resourceType
 		} else if contains(c.Request.URL.Path, "/users") {
-			resourceType := "user"
+			resourceType = "user"
 			auditLog.ResourceType = &resourceType
-		} else if contains(c.Request.URL.Path, "/api-keys") {
-			resourceType := "api_key"
+		} else if contains(c.Request.URL.Path, "/apikeys") {
+			resourceType = "api_key"
+			auditLog.ResourceType = &resourceType
+		} else if contains(c.Request.URL.Path, "/organizations") {
+			resourceType = "organization"
 			auditLog.ResourceType = &resourceType
 		}
 
 		// Extract metadata from context if available
 		metadata := make(map[string]interface{})
 
-		if authMethod, exists := c.Get("auth_method"); exists {
+		if authMethod != nil {
 			metadata["auth_method"] = authMethod
 		}
+		metadata["status_code"] = c.Writer.Status()
 
 		if len(metadata) > 0 {
 			auditLog.Metadata = metadata
@@ -95,11 +134,35 @@ func AuditMiddleware(auditRepo *repositories.AuditRepository) gin.HandlerFunc {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			err := auditRepo.CreateAuditLog(ctx, auditLog)
-			if err != nil {
-				// Log error but don't fail the request
-				// In production, you might want to log this to a separate error tracking system
-				fmt.Printf("Failed to create audit log: %v\n", err)
+			// Write to database
+			if auditRepo != nil {
+				if err := auditRepo.CreateAuditLog(ctx, auditLog); err != nil {
+					fmt.Printf("Failed to create audit log in database: %v\n", err)
+				}
+			}
+
+			// Ship to external destinations
+			if shipper != nil {
+				authMethodStr := ""
+				if am, ok := authMethod.(string); ok {
+					authMethodStr = am
+				}
+
+				entry := &audit.LogEntry{
+					Timestamp:      auditLog.CreatedAt,
+					Action:         auditLog.Action,
+					UserID:         userIDStr,
+					OrganizationID: orgIDStr,
+					ResourceType:   resourceType,
+					IPAddress:      ipAddress,
+					AuthMethod:     authMethodStr,
+					StatusCode:     c.Writer.Status(),
+					Metadata:       metadata,
+				}
+
+				if err := shipper.Ship(ctx, entry); err != nil {
+					fmt.Printf("Failed to ship audit log: %v\n", err)
+				}
 			}
 		}()
 	}
@@ -109,7 +172,7 @@ func AuditMiddleware(auditRepo *repositories.AuditRepository) gin.HandlerFunc {
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
 		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-		indexOf(s, substr) >= 0))
+			indexOf(s, substr) >= 0))
 }
 
 // indexOf returns the index of the first instance of substr in s, or -1 if substr is not present

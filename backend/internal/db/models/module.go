@@ -11,8 +11,11 @@ type Module struct {
 	System         string
 	Description    *string
 	Source         *string
+	CreatedBy      *string // User ID who created this module
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+	// Joined fields (not stored in modules table)
+	CreatedByName *string // User name who created this module (joined from users table)
 }
 
 // ModuleVersion represents a specific version of a module
@@ -31,4 +34,6 @@ type ModuleVersion struct {
 	DeprecatedAt       *time.Time // When the version was deprecated
 	DeprecationMessage *string    // Optional message explaining deprecation
 	CreatedAt          time.Time
+	// Joined fields (not stored in module_versions table)
+	PublishedByName *string // User name who published this version (joined from users table)
 }

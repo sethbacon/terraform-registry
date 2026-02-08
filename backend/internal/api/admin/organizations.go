@@ -95,8 +95,8 @@ func (h *OrganizationHandlers) GetOrganizationHandler() gin.HandlerFunc {
 			return
 		}
 
-		// Get organization members
-		members, err := h.orgRepo.ListMembers(c.Request.Context(), orgID)
+		// Get organization members with user details
+		members, err := h.orgRepo.ListMembersWithUsers(c.Request.Context(), orgID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Failed to retrieve organization members",
@@ -107,6 +107,43 @@ func (h *OrganizationHandlers) GetOrganizationHandler() gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{
 			"organization": org,
 			"members":      members,
+		})
+	}
+}
+
+// ListMembersHandler retrieves all members of an organization with user details
+// GET /api/v1/organizations/:id/members
+func (h *OrganizationHandlers) ListMembersHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		orgID := c.Param("id")
+
+		// Check if organization exists
+		org, err := h.orgRepo.GetByID(c.Request.Context(), orgID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to retrieve organization",
+			})
+			return
+		}
+
+		if org == nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Organization not found",
+			})
+			return
+		}
+
+		// Get members with user details
+		members, err := h.orgRepo.ListMembersWithUsers(c.Request.Context(), orgID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to retrieve organization members",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"members": members,
 		})
 	}
 }
@@ -256,8 +293,8 @@ func (h *OrganizationHandlers) DeleteOrganizationHandler() gin.HandlerFunc {
 
 // AddMemberRequest represents the request to add a member to an organization
 type AddMemberRequest struct {
-	UserID string `json:"user_id" binding:"required"`
-	Role   string `json:"role" binding:"required"`
+	UserID         string  `json:"user_id" binding:"required"`
+	RoleTemplateID *string `json:"role_template_id"` // Optional, UUID of role template
 }
 
 // AddMemberHandler adds a member to an organization
@@ -270,20 +307,6 @@ func (h *OrganizationHandlers) AddMemberHandler() gin.HandlerFunc {
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error": "Invalid request: " + err.Error(),
-			})
-			return
-		}
-
-		// Validate role
-		validRoles := map[string]bool{
-			"owner":  true,
-			"admin":  true,
-			"member": true,
-		}
-
-		if !validRoles[req.Role] {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "Invalid role. Must be 'owner', 'admin', or 'member'",
 			})
 			return
 		}
@@ -304,11 +327,27 @@ func (h *OrganizationHandlers) AddMemberHandler() gin.HandlerFunc {
 			return
 		}
 
-		// Add member
+		// Check if user is already a member
+		existingMember, err := h.orgRepo.GetMember(c.Request.Context(), orgID, req.UserID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to check existing membership",
+			})
+			return
+		}
+
+		if existingMember != nil {
+			c.JSON(http.StatusConflict, gin.H{
+				"error": "User is already a member of this organization",
+			})
+			return
+		}
+
+		// Add member with role template
 		member := &models.OrganizationMember{
 			OrganizationID: orgID,
 			UserID:         req.UserID,
-			Role:           req.Role,
+			RoleTemplateID: req.RoleTemplateID,
 			CreatedAt:      time.Now(),
 		}
 
@@ -319,18 +358,28 @@ func (h *OrganizationHandlers) AddMemberHandler() gin.HandlerFunc {
 			return
 		}
 
+		// Get member with role template info for response
+		memberWithRole, err := h.orgRepo.GetMemberWithRole(c.Request.Context(), orgID, req.UserID)
+		if err != nil {
+			// Return basic member info if we can't get role details
+			c.JSON(http.StatusCreated, gin.H{
+				"member": member,
+			})
+			return
+		}
+
 		c.JSON(http.StatusCreated, gin.H{
-			"member": member,
+			"member": memberWithRole,
 		})
 	}
 }
 
-// UpdateMemberRequest represents the request to update a member's role
+// UpdateMemberRequest represents the request to update a member's role template
 type UpdateMemberRequest struct {
-	Role string `json:"role" binding:"required"`
+	RoleTemplateID *string `json:"role_template_id"` // UUID of role template, or null to clear
 }
 
-// UpdateMemberHandler updates a member's role in an organization
+// UpdateMemberHandler updates a member's role template in an organization
 // PUT /api/v1/organizations/:id/members/:user_id
 func (h *OrganizationHandlers) UpdateMemberHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -341,20 +390,6 @@ func (h *OrganizationHandlers) UpdateMemberHandler() gin.HandlerFunc {
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error": "Invalid request: " + err.Error(),
-			})
-			return
-		}
-
-		// Validate role
-		validRoles := map[string]bool{
-			"owner":  true,
-			"admin":  true,
-			"member": true,
-		}
-
-		if !validRoles[req.Role] {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "Invalid role. Must be 'owner', 'admin', or 'member'",
 			})
 			return
 		}
@@ -375,8 +410,8 @@ func (h *OrganizationHandlers) UpdateMemberHandler() gin.HandlerFunc {
 			return
 		}
 
-		// Update role
-		member.Role = req.Role
+		// Update role template
+		member.RoleTemplateID = req.RoleTemplateID
 		if err := h.orgRepo.UpdateMember(c.Request.Context(), member); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Failed to update member role",
@@ -384,8 +419,18 @@ func (h *OrganizationHandlers) UpdateMemberHandler() gin.HandlerFunc {
 			return
 		}
 
+		// Get member with role template info for response
+		memberWithRole, err := h.orgRepo.GetMemberWithRole(c.Request.Context(), orgID, userID)
+		if err != nil {
+			// Return basic member info if we can't get role details
+			c.JSON(http.StatusOK, gin.H{
+				"member": member,
+			})
+			return
+		}
+
 		c.JSON(http.StatusOK, gin.H{
-			"member": member,
+			"member": memberWithRole,
 		})
 	}
 }

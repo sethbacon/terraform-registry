@@ -25,6 +25,14 @@ const (
 	ScopeUsersRead  Scope = "users:read"
 	ScopeUsersWrite Scope = "users:write"
 
+	// Organization management scopes
+	ScopeOrganizationsRead  Scope = "organizations:read"  // View organizations and members
+	ScopeOrganizationsWrite Scope = "organizations:write" // Create, update, delete organizations and manage members
+
+	// SCM provider management scopes
+	ScopeSCMRead   Scope = "scm:read"   // View SCM provider configurations
+	ScopeSCMManage Scope = "scm:manage" // Create, update, delete SCM providers and manage OAuth
+
 	// API key management scopes
 	ScopeAPIKeysManage Scope = "api_keys:manage"
 
@@ -46,6 +54,10 @@ func AllScopes() []Scope {
 		ScopeMirrorsManage,
 		ScopeUsersRead,
 		ScopeUsersWrite,
+		ScopeOrganizationsRead,
+		ScopeOrganizationsWrite,
+		ScopeSCMRead,
+		ScopeSCMManage,
 		ScopeAPIKeysManage,
 		ScopeAuditRead,
 		ScopeAdmin,
@@ -102,6 +114,12 @@ func HasScope(userScopes []string, required Scope) bool {
 			return true
 		}
 		if required == ScopeMirrorsRead && scope == string(ScopeMirrorsManage) {
+			return true
+		}
+		if required == ScopeOrganizationsRead && scope == string(ScopeOrganizationsWrite) {
+			return true
+		}
+		if required == ScopeSCMRead && scope == string(ScopeSCMManage) {
 			return true
 		}
 	}

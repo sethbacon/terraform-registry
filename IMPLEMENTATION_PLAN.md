@@ -524,6 +524,16 @@ Focus on core registry functionality and provider mirroring capabilities first. 
 - Binary deployment documentation
 - TLS/SSL configuration examples
 
+**Future Enhancement (Storage Manager Role):**
+
+When storage backends are implemented, consider adding a **Storage Manager** role template with dedicated scopes for managing storage operations:
+
+- `storage:read` - View storage configurations and usage statistics
+- `storage:write` - Upload files to storage, manage storage paths
+- `storage:manage` - Configure storage backends, manage quotas, purge/cleanup operations
+
+This role would complement the existing RBAC system and provide granular control over storage operations separately from module/provider publishing permissions. Implementation should be coordinated with the storage backend work in this phase.
+
 ### Phase 7: Documentation & Testing (Sessions 20-22)
 
 **Objectives:**
@@ -795,7 +805,7 @@ GET/POST/DELETE /api/v1/api-keys
 ## Success Criteria
 
 1. ✅ All three Terraform protocols fully implemented
-2. ✅ Multi-backend storage (Azure Blob, S3, local)
+2. ✅ Multi-backend storage (Azure Blob, AWS S3, GCP Storage Bucket, local)
 3. ✅ PostgreSQL with migrations
 4. ✅ Authentication (API keys, Azure AD, OIDC)
 5. ✅ Configurable multi-tenancy
@@ -896,9 +906,12 @@ GET/POST/DELETE /api/v1/api-keys
 
 ---
 
-**Last Updated**: Session 15 - 2026-02-04
+**Last Updated**: Session 16 - 2026-02-06
 **Status**: ✅ Phase 5C COMPLETE - Full provider network mirroring with GPG verification, RBAC, audit logging, and UI
 **Next Session**: Session 16 - Storage Backends (Azure Blob and S3 implementation)
 **Priority**: Phase 6 (Storage Backends) - Implement cloud storage for production deployments
 **Deferred**: Phase 5B (Azure DevOps Extension) - Will implement based on future demand
 
+**Known Issues (Resolved)**:
+
+- Database migration 008 (SCM tables) may not have been applied in existing deployments where the Docker image was built before the migration was added. If you encounter "failed to list providers" errors, manually run the migration SQL from `backend/internal/db/migrations/000008_scm_integration.up.sql` against your database.

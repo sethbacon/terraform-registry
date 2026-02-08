@@ -40,6 +40,7 @@ import {
 } from '@mui/icons-material';
 import api from '../services/api';
 import { Provider, ProviderVersion } from '../types';
+import { REGISTRY_HOST } from '../config';
 
 const ProviderDetailPage: React.FC = () => {
   const { namespace, type } = useParams<{
@@ -208,7 +209,7 @@ const ProviderDetailPage: React.FC = () => {
     return `terraform {
   required_providers {
     ${name} = {
-      source  = "${window.location.origin}/v1/providers/${namespace}/${name}"
+      source  = "${REGISTRY_HOST}/${namespace}/${name}"
       version = "${selectedVersion.version}"
     }
   }
@@ -344,7 +345,8 @@ provider "${name}" {
               component="pre"
               sx={{
                 p: 2,
-                backgroundColor: '#f5f5f5',
+                backgroundColor: (theme) => theme.palette.mode === 'dark' ? '#2d2d2d' : '#f5f5f5',
+                color: (theme) => theme.palette.mode === 'dark' ? '#e6e6e6' : '#1e1e1e',
                 borderRadius: 1,
                 overflow: 'auto',
                 fontSize: '0.875rem',
@@ -424,6 +426,11 @@ provider "${name}" {
               <Typography variant="body2">
                 <strong>Organization:</strong> {provider.organization_name || 'N/A'}
               </Typography>
+              {provider.created_by_name && (
+                <Typography variant="body2">
+                  <strong>Created By:</strong> {provider.created_by_name}
+                </Typography>
+              )}
             </Box>
           </Paper>
 
@@ -441,6 +448,11 @@ provider "${name}" {
               <Typography variant="body2" sx={{ mb: 2 }}>
                 <strong>Downloads:</strong> {selectedVersion.download_count ?? 0}
               </Typography>
+              {selectedVersion.published_by_name && (
+                <Typography variant="body2" sx={{ mb: 2 }}>
+                  <strong>Published By:</strong> {selectedVersion.published_by_name}
+                </Typography>
+              )}
 
               {/* Deprecation Status */}
               {selectedVersion.deprecated && (

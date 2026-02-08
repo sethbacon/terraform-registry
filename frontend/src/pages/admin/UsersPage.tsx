@@ -18,14 +18,16 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Chip,
   CircularProgress,
   Alert,
   Stack,
+  Tooltip,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Divider,
   SelectChangeEvent,
 } from '@mui/material';
 import {
@@ -33,12 +35,19 @@ import {
   Delete as DeleteIcon,
   Add as AddIcon,
   Search as SearchIcon,
+  Business as BusinessIcon,
 } from '@mui/icons-material';
 import api from '../../services/api';
-import { User } from '../../types';
+import { User, UserMembership, Organization } from '../../types';
+import { RoleTemplate } from '../../types/rbac';
+
+interface UserWithMemberships extends User {
+  memberships?: UserMembership[];
+  membershipsLoading?: boolean;
+}
 
 const UsersPage: React.FC = () => {
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserWithMemberships[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,15 +57,28 @@ const UsersPage: React.FC = () => {
 
   // Dialog state
   const [openDialog, setOpenDialog] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editingUser, setEditingUser] = useState<UserWithMemberships | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
+
+  // Organizations for selection
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [orgsLoading, setOrgsLoading] = useState(false);
+
+  // Role templates for selection
+  const [roleTemplates, setRoleTemplates] = useState<RoleTemplate[]>([]);
+  const [roleTemplatesLoading, setRoleTemplatesLoading] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
     email: '',
     name: '',
+    organizationId: '',
+    roleTemplateId: '', // Role template for org membership
   });
+
+  // User memberships being edited
+  const [editMemberships, setEditMemberships] = useState<UserMembership[]>([]);
 
   useEffect(() => {
     loadUsers();
@@ -66,16 +88,22 @@ const UsersPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       let response;
       if (searchQuery) {
         response = await api.searchUsers(searchQuery, page + 1, rowsPerPage);
       } else {
         response = await api.listUsers(page + 1, rowsPerPage);
       }
-      
-      setUsers(response.users || []);
+
+      const usersData = response.users || [];
+      setUsers(usersData.map((u: User) => ({ ...u, memberships: undefined, membershipsLoading: true })));
       setTotalUsers(response.pagination?.total || 0);
+
+      // Load memberships for each user
+      for (const user of usersData) {
+        loadUserMemberships(user.id);
+      }
     } catch (err) {
       console.error('Failed to load users:', err);
       setError('Failed to load users. Please try again.');
@@ -84,19 +112,75 @@ const UsersPage: React.FC = () => {
     }
   };
 
-  const handleOpenDialog = (user?: User) => {
+  const loadUserMemberships = async (userId: string) => {
+    try {
+      const memberships = await api.getUserMemberships(userId);
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === userId
+            ? { ...u, memberships, membershipsLoading: false }
+            : u
+        )
+      );
+    } catch (err) {
+      console.error(`Failed to load memberships for user ${userId}:`, err);
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === userId
+            ? { ...u, memberships: [], membershipsLoading: false }
+            : u
+        )
+      );
+    }
+  };
+
+  const loadOrganizations = async () => {
+    try {
+      setOrgsLoading(true);
+      const orgs = await api.listOrganizations();
+      setOrganizations(orgs || []);
+    } catch (err) {
+      console.error('Failed to load organizations:', err);
+      setOrganizations([]);
+    } finally {
+      setOrgsLoading(false);
+    }
+  };
+
+  const loadRoleTemplates = async () => {
+    try {
+      setRoleTemplatesLoading(true);
+      const templates = await api.listRoleTemplates();
+      setRoleTemplates(templates || []);
+    } catch (err) {
+      console.error('Failed to load role templates:', err);
+      setRoleTemplates([]);
+    } finally {
+      setRoleTemplatesLoading(false);
+    }
+  };
+
+  const handleOpenDialog = async (user?: UserWithMemberships) => {
+    await Promise.all([loadOrganizations(), loadRoleTemplates()]);
+
     if (user) {
       setEditingUser(user);
       setFormData({
         email: user.email,
         name: user.name || '',
+        organizationId: '',
+        roleTemplateId: '',
       });
+      setEditMemberships(user.memberships || []);
     } else {
       setEditingUser(null);
       setFormData({
         email: '',
         name: '',
+        organizationId: '',
+        roleTemplateId: '',
       });
+      setEditMemberships([]);
     }
     setOpenDialog(true);
   };
@@ -105,21 +189,96 @@ const UsersPage: React.FC = () => {
     setOpenDialog(false);
     setEditingUser(null);
     setError(null);
+    setEditMemberships([]);
   };
 
   const handleSaveUser = async () => {
     try {
       setError(null);
+      let userId = editingUser?.id;
+
       if (editingUser) {
-        await api.updateUser(editingUser.id, formData);
+        await api.updateUser(editingUser.id, {
+          name: formData.name,
+        });
       } else {
-        await api.createUser(formData);
+        const newUser = await api.createUser({ email: formData.email, name: formData.name });
+        userId = newUser.id;
       }
+
+      // Add to organization if selected (for new users)
+      if (!editingUser && formData.organizationId && userId) {
+        try {
+          await api.addOrganizationMember(formData.organizationId, {
+            user_id: userId,
+            role_template_id: formData.roleTemplateId || undefined,
+          });
+        } catch (err: any) {
+          console.error('Failed to add user to organization:', err);
+          // Don't fail the whole operation, user was created
+        }
+      }
+
       handleCloseDialog();
       loadUsers();
     } catch (err: any) {
       console.error('Failed to save user:', err);
       setError(err.response?.data?.error || 'Failed to save user. Please try again.');
+    }
+  };
+
+  const handleAddMembership = async () => {
+    if (!editingUser || !formData.organizationId) return;
+
+    try {
+      setError(null);
+      await api.addOrganizationMember(formData.organizationId, {
+        user_id: editingUser.id,
+        role_template_id: formData.roleTemplateId || undefined,
+      });
+
+      // Refresh memberships
+      const memberships = await api.getUserMemberships(editingUser.id);
+      setEditMemberships(memberships);
+
+      // Reset selection
+      setFormData(prev => ({ ...prev, organizationId: '', roleTemplateId: '' }));
+    } catch (err: any) {
+      console.error('Failed to add membership:', err);
+      setError(err.response?.data?.error || 'Failed to add organization membership');
+    }
+  };
+
+  const handleUpdateMembershipRole = async (orgId: string, newRoleTemplateId: string | null) => {
+    if (!editingUser) return;
+
+    try {
+      setError(null);
+      await api.updateOrganizationMember(orgId, editingUser.id, {
+        role_template_id: newRoleTemplateId || undefined
+      });
+
+      // Refresh memberships to get updated role template info
+      const memberships = await api.getUserMemberships(editingUser.id);
+      setEditMemberships(memberships);
+    } catch (err: any) {
+      console.error('Failed to update membership role:', err);
+      setError(err.response?.data?.error || 'Failed to update role');
+    }
+  };
+
+  const handleRemoveMembership = async (orgId: string) => {
+    if (!editingUser) return;
+
+    try {
+      setError(null);
+      await api.removeOrganizationMember(orgId, editingUser.id);
+
+      // Update local state
+      setEditMemberships(prev => prev.filter(m => m.organization_id !== orgId));
+    } catch (err: any) {
+      console.error('Failed to remove membership:', err);
+      setError(err.response?.data?.error || 'Failed to remove from organization');
     }
   };
 
@@ -152,6 +311,29 @@ const UsersPage: React.FC = () => {
     setPage(0);
   };
 
+  const getRoleTemplateColor = (templateName?: string): 'error' | 'warning' | 'primary' | 'info' | 'success' | 'default' => {
+    switch (templateName) {
+      case 'admin':
+        return 'error';
+      case 'devops':
+      case 'user_manager':
+        return 'warning';
+      case 'publisher':
+        return 'primary';
+      case 'viewer':
+        return 'info';
+      case 'auditor':
+        return 'success';
+      default:
+        return 'default';
+    }
+  };
+
+  // Get organizations not already assigned to the user
+  const availableOrganizations = organizations.filter(
+    org => !editMemberships.some(m => m.organization_id === org.id)
+  );
+
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -173,7 +355,7 @@ const UsersPage: React.FC = () => {
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
@@ -201,6 +383,7 @@ const UsersPage: React.FC = () => {
               <TableRow>
                 <TableCell>Name</TableCell>
                 <TableCell>Email</TableCell>
+                <TableCell>Organizations & Roles</TableCell>
                 <TableCell>Created</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
@@ -208,13 +391,13 @@ const UsersPage: React.FC = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={4} align="center" sx={{ py: 8 }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 8 }}>
                     <CircularProgress />
                   </TableCell>
                 </TableRow>
               ) : users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} align="center" sx={{ py: 8 }}>
+                  <TableCell colSpan={5} align="center" sx={{ py: 8 }}>
                     <Typography color="text.secondary">No users found</Typography>
                   </TableCell>
                 </TableRow>
@@ -223,6 +406,36 @@ const UsersPage: React.FC = () => {
                   <TableRow key={user.id}>
                     <TableCell>{user.name}</TableCell>
                     <TableCell>{user.email}</TableCell>
+                    <TableCell>
+                      {user.membershipsLoading ? (
+                        <CircularProgress size={16} />
+                      ) : user.memberships && user.memberships.length > 0 ? (
+                        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                          {user.memberships.map((m) => (
+                            <Tooltip
+                              key={m.organization_id}
+                              title={m.role_template_display_name
+                                ? `${m.organization_name}: ${m.role_template_display_name}`
+                                : `${m.organization_name}: No role assigned`
+                              }
+                            >
+                              <Chip
+                                icon={<BusinessIcon />}
+                                label={`${m.organization_name} (${m.role_template_display_name || 'No role'})`}
+                                size="small"
+                                color={getRoleTemplateColor(m.role_template_name || undefined)}
+                                variant="outlined"
+                                sx={{ mb: 0.5 }}
+                              />
+                            </Tooltip>
+                          ))}
+                        </Stack>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          No organizations
+                        </Typography>
+                      )}
+                    </TableCell>
                     <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
                     <TableCell align="right">
                       <IconButton
@@ -278,6 +491,122 @@ const UsersPage: React.FC = () => {
               required
               fullWidth
             />
+
+            <Divider sx={{ my: 1 }} />
+
+            <Typography variant="subtitle2" color="text.secondary">
+              Organization Membership
+            </Typography>
+
+            {/* Show existing memberships when editing */}
+            {editingUser && editMemberships.length > 0 && (
+              <Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  Current Organizations:
+                </Typography>
+                <Stack spacing={1}>
+                  {editMemberships.map((m) => (
+                    <Box
+                      key={m.organization_id}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        p: 1,
+                        bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.800' : 'grey.50',
+                        borderRadius: 1,
+                      }}
+                    >
+                      <BusinessIcon fontSize="small" color="action" />
+                      <Typography variant="body2" sx={{ flex: 1 }}>
+                        {m.organization_name}
+                      </Typography>
+                      <FormControl size="small" sx={{ minWidth: 150 }}>
+                        <Select
+                          value={m.role_template_id || ''}
+                          displayEmpty
+                          onChange={(e: SelectChangeEvent) =>
+                            handleUpdateMembershipRole(m.organization_id, e.target.value || null)
+                          }
+                        >
+                          <MenuItem value="">
+                            <em>No role</em>
+                          </MenuItem>
+                          {roleTemplates.map((template) => (
+                            <MenuItem key={template.id} value={template.id}>
+                              {template.display_name}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleRemoveMembership(m.organization_id)}
+                        color="error"
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  ))}
+                </Stack>
+              </Box>
+            )}
+
+            {/* Add to organization */}
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+              <FormControl fullWidth size="small">
+                <InputLabel>
+                  {editingUser ? 'Add to Organization' : 'Organization (Optional)'}
+                </InputLabel>
+                <Select
+                  value={formData.organizationId}
+                  label={editingUser ? 'Add to Organization' : 'Organization (Optional)'}
+                  onChange={(e: SelectChangeEvent) =>
+                    setFormData({ ...formData, organizationId: e.target.value })
+                  }
+                  disabled={orgsLoading}
+                >
+                  <MenuItem value="">
+                    <em>None</em>
+                  </MenuItem>
+                  {availableOrganizations.map((org) => (
+                    <MenuItem key={org.id} value={org.id}>
+                      {org.display_name || org.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 150 }}>
+                <InputLabel>Role Template</InputLabel>
+                <Select
+                  value={formData.roleTemplateId}
+                  label="Role Template"
+                  onChange={(e: SelectChangeEvent) =>
+                    setFormData({ ...formData, roleTemplateId: e.target.value })
+                  }
+                  disabled={!formData.organizationId || roleTemplatesLoading}
+                >
+                  <MenuItem value="">
+                    <em>No role</em>
+                  </MenuItem>
+                  {roleTemplates.map((template) => (
+                    <MenuItem key={template.id} value={template.id}>
+                      {template.display_name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {editingUser && (
+                <Button
+                  variant="outlined"
+                  onClick={handleAddMembership}
+                  disabled={!formData.organizationId}
+                  sx={{ minWidth: 'auto', px: 2 }}
+                >
+                  Add
+                </Button>
+              )}
+            </Box>
           </Stack>
         </DialogContent>
         <DialogActions>

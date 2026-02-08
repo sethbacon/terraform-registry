@@ -94,19 +94,18 @@ const HomePage: React.FC = () => {
             </Button>
             {isAuthenticated && (
               <Button
-                variant="outlined"
+                variant="contained"
                 size="large"
-                onClick={() => navigate('/admin/upload')}
+                onClick={() => navigate('/providers')}
                 sx={{
-                  borderColor: 'white',
-                  color: 'white',
-                  '&:hover': {
-                    borderColor: 'white',
-                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                  },
-                }}
+                backgroundColor: 'white',
+                color: '#5C4EE5',
+                '&:hover': {
+                  backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                },
+              }}
               >
-                Upload Module
+                Browse Providers
               </Button>
             )}
           </Stack>
@@ -159,7 +158,7 @@ const HomePage: React.FC = () => {
       </Container>
 
       {/* Quick Stats Section */}
-      <Box sx={{ backgroundColor: '#f5f5f5', py: 6 }}>
+      <Box sx={{ backgroundColor: (theme) => theme.palette.mode === 'dark' ? '#1a1a1a' : '#f5f5f5', py: 6 }}>
         <Container maxWidth="lg">
           <Typography variant="h4" gutterBottom sx={{ mb: 4 }}>
             Getting Started

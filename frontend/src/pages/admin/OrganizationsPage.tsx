@@ -17,23 +17,26 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  Chip,
   CircularProgress,
   Alert,
   Stack,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Autocomplete,
+  SelectChangeEvent,
 } from '@mui/material';
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Add as AddIcon,
   People as PeopleIcon,
+  PersonAdd as PersonAddIcon,
 } from '@mui/icons-material';
 import api from '../../services/api';
-import { Organization } from '../../types';
+import { Organization, OrganizationMemberWithUser, User } from '../../types';
+import { RoleTemplate } from '../../types/rbac';
 
 const OrganizationsPage: React.FC = () => {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -47,6 +50,15 @@ const OrganizationsPage: React.FC = () => {
   const [orgToDelete, setOrgToDelete] = useState<Organization | null>(null);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
+  const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
+
+  // Members state
+  const [members, setMembers] = useState<OrganizationMemberWithUser[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedRoleTemplateId, setSelectedRoleTemplateId] = useState<string>('');
+  const [roleTemplates, setRoleTemplates] = useState<RoleTemplate[]>([]);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -143,9 +155,95 @@ const OrganizationsPage: React.FC = () => {
     }
   };
 
-  const handleViewMembers = (org: Organization) => {
+  const handleViewMembers = async (org: Organization) => {
     setSelectedOrg(org);
     setMembersDialogOpen(true);
+    await Promise.all([loadMembers(org.id), loadRoleTemplates()]);
+  };
+
+  const loadMembers = async (orgId: string) => {
+    try {
+      setMembersLoading(true);
+      const membersData = await api.listOrganizationMembers(orgId);
+      setMembers(membersData);
+    } catch (err) {
+      console.error('Failed to load members:', err);
+      setMembers([]);
+    } finally {
+      setMembersLoading(false);
+    }
+  };
+
+  const loadAllUsers = async () => {
+    try {
+      const response = await api.listUsers(1, 100);
+      setAllUsers(response.users || []);
+    } catch (err) {
+      console.error('Failed to load users:', err);
+      setAllUsers([]);
+    }
+  };
+
+  const loadRoleTemplates = async () => {
+    try {
+      const templates = await api.listRoleTemplates();
+      setRoleTemplates(templates || []);
+    } catch (err) {
+      console.error('Failed to load role templates:', err);
+      setRoleTemplates([]);
+    }
+  };
+
+  const handleOpenAddMember = async () => {
+    await Promise.all([loadAllUsers(), loadRoleTemplates()]);
+    setSelectedUser(null);
+    setSelectedRoleTemplateId('');
+    setAddMemberDialogOpen(true);
+  };
+
+  const handleAddMember = async () => {
+    if (!selectedOrg || !selectedUser) return;
+
+    try {
+      setError(null);
+      await api.addOrganizationMember(selectedOrg.id, {
+        user_id: selectedUser.id,
+        role_template_id: selectedRoleTemplateId || undefined,
+      });
+      setAddMemberDialogOpen(false);
+      await loadMembers(selectedOrg.id);
+    } catch (err: any) {
+      console.error('Failed to add member:', err);
+      setError(err.response?.data?.error || 'Failed to add member');
+    }
+  };
+
+  const handleUpdateMemberRole = async (userId: string, newRoleTemplateId: string | null) => {
+    if (!selectedOrg) return;
+
+    try {
+      setError(null);
+      await api.updateOrganizationMember(selectedOrg.id, userId, {
+        role_template_id: newRoleTemplateId || undefined
+      });
+      await loadMembers(selectedOrg.id);
+    } catch (err: any) {
+      console.error('Failed to update member role:', err);
+      setError(err.response?.data?.error || 'Failed to update member role');
+    }
+  };
+
+  const handleRemoveMember = async (userId: string) => {
+    if (!selectedOrg) return;
+
+    try {
+      setError(null);
+      await api.removeOrganizationMember(selectedOrg.id, userId);
+      await loadMembers(selectedOrg.id);
+    } catch (err: any) {
+      console.error('Failed to remove member:', err);
+      setError(err.response?.data?.error || 'Failed to remove member');
+    }
   };
 
   return (
@@ -303,27 +401,162 @@ const OrganizationsPage: React.FC = () => {
       <Dialog
         open={membersDialogOpen}
         onClose={() => setMembersDialogOpen(false)}
-        maxWidth="sm"
+        maxWidth="md"
         fullWidth
       >
-        <DialogTitle>Organization Members - {selectedOrg?.name}</DialogTitle>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Organization Members - {selectedOrg?.name}</span>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<PersonAddIcon />}
+              onClick={handleOpenAddMember}
+            >
+              Add Member
+            </Button>
+          </Box>
+        </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            View and manage members of this organization
+            Manage members and their roles in this organization
           </Typography>
-          <Paper variant="outlined">
-            <List>
-              <ListItem>
-                <ListItemText
-                  primary="Member management"
-                  secondary="Member management functionality can be added here"
-                />
-              </ListItem>
-            </List>
-          </Paper>
+          {membersLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : members.length === 0 ? (
+            <Paper variant="outlined" sx={{ p: 3, textAlign: 'center' }}>
+              <Typography color="text.secondary">
+                No members in this organization yet
+              </Typography>
+              <Button
+                variant="outlined"
+                startIcon={<PersonAddIcon />}
+                onClick={handleOpenAddMember}
+                sx={{ mt: 2 }}
+              >
+                Add First Member
+              </Button>
+            </Paper>
+          ) : (
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Name</TableCell>
+                    <TableCell>Email</TableCell>
+                    <TableCell>Role</TableCell>
+                    <TableCell align="right">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {members.map((member) => (
+                    <TableRow key={member.user_id}>
+                      <TableCell>{member.user_name || 'Unknown'}</TableCell>
+                      <TableCell>{member.user_email || '-'}</TableCell>
+                      <TableCell>
+                        <FormControl size="small" sx={{ minWidth: 150 }}>
+                          <Select
+                            value={member.role_template_id || ''}
+                            displayEmpty
+                            onChange={(e: SelectChangeEvent) =>
+                              handleUpdateMemberRole(member.user_id, e.target.value || null)
+                            }
+                          >
+                            <MenuItem value="">
+                              <em>No role</em>
+                            </MenuItem>
+                            {roleTemplates.map((template) => (
+                              <MenuItem key={template.id} value={template.id}>
+                                {template.display_name}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </TableCell>
+                      <TableCell align="right">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleRemoveMember(member.user_id)}
+                          color="error"
+                          title="Remove member"
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setMembersDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add Member Dialog */}
+      <Dialog
+        open={addMemberDialogOpen}
+        onClose={() => setAddMemberDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Add Member to {selectedOrg?.name}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={3} sx={{ mt: 2 }}>
+            <Autocomplete
+              options={allUsers.filter(
+                (u) => !members.some((m) => m.user_id === u.id)
+              )}
+              getOptionLabel={(option) => `${option.name} (${option.email})`}
+              value={selectedUser}
+              onChange={(_, newValue) => setSelectedUser(newValue)}
+              renderInput={(params) => (
+                <TextField {...params} label="Select User" placeholder="Search users..." />
+              )}
+              fullWidth
+            />
+            <FormControl fullWidth>
+              <InputLabel>Role Template</InputLabel>
+              <Select
+                value={selectedRoleTemplateId}
+                label="Role Template"
+                onChange={(e: SelectChangeEvent) => setSelectedRoleTemplateId(e.target.value)}
+              >
+                <MenuItem value="">
+                  <em>No role (view only)</em>
+                </MenuItem>
+                {roleTemplates.map((template) => (
+                  <MenuItem key={template.id} value={template.id}>
+                    {template.display_name}
+                    {template.description && (
+                      <Typography
+                        component="span"
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ ml: 1 }}
+                      >
+                        - {template.description}
+                      </Typography>
+                    )}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddMemberDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleAddMember}
+            variant="contained"
+            disabled={!selectedUser}
+          >
+            Add Member
+          </Button>
         </DialogActions>
       </Dialog>
     </Container>

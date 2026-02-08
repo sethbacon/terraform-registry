@@ -190,7 +190,7 @@ const UploadPage: React.FC = () => {
             <Typography variant="h6" gutterBottom>
               Upload Terraform Module
             </Typography>
-            <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+            <Box sx={{ mb: 3, p: 2, bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.800' : 'grey.50', borderRadius: 1 }}>
               <Typography variant="body2" color="text.secondary" gutterBottom>
                 <strong>Requirements:</strong>
               </Typography>
@@ -294,7 +294,7 @@ const UploadPage: React.FC = () => {
             <Typography variant="h6" gutterBottom>
               Upload Terraform Provider
             </Typography>
-            <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+            <Box sx={{ mb: 3, p: 2, bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.800' : 'grey.50', borderRadius: 1 }}>
               <Typography variant="body2" color="text.secondary" gutterBottom>
                 <strong>Requirements:</strong>
               </Typography>

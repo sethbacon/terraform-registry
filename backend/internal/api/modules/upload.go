@@ -121,6 +121,12 @@ func UploadHandler(db *sql.DB, storageBackend storage.Storage, cfg *config.Confi
 			if source != "" {
 				module.Source = &source
 			}
+			// Set created_by for audit tracking
+			if userID, exists := c.Get("user_id"); exists {
+				if uid, ok := userID.(string); ok {
+					module.CreatedBy = &uid
+				}
+			}
 
 			if err := moduleRepo.CreateModule(c.Request.Context(), module); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{
@@ -191,7 +197,12 @@ func UploadHandler(db *sql.DB, storageBackend storage.Storage, cfg *config.Confi
 			StorageBackend: cfg.Storage.DefaultBackend,
 			SizeBytes:      uploadResult.Size,
 			Checksum:       uploadResult.Checksum,
-			// PublishedBy will be set when auth is implemented in Phase 4
+		}
+		// Set published_by for audit tracking
+		if userID, exists := c.Get("user_id"); exists {
+			if uid, ok := userID.(string); ok {
+				moduleVersion.PublishedBy = &uid
+			}
 		}
 
 		// Set README if extracted

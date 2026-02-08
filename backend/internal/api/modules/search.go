@@ -89,16 +89,18 @@ func SearchHandler(db *sql.DB, cfg *config.Config) gin.HandlerFunc {
 			}
 
 			results[i] = gin.H{
-				"id":             m.ID,
-				"namespace":      m.Namespace,
-				"name":           m.Name,
-				"system":         m.System,
-				"description":    m.Description,
-				"source":         m.Source,
-				"latest_version": latestVersion,
-				"download_count": totalDownloads,
-				"created_at":     m.CreatedAt,
-				"updated_at":     m.UpdatedAt,
+				"id":              m.ID,
+				"namespace":       m.Namespace,
+				"name":            m.Name,
+				"system":          m.System,
+				"description":     m.Description,
+				"source":          m.Source,
+				"latest_version":  latestVersion,
+				"download_count":  totalDownloads,
+				"created_by":      m.CreatedBy,
+				"created_by_name": m.CreatedByName,
+				"created_at":      m.CreatedAt,
+				"updated_at":      m.UpdatedAt,
 			}
 		}
 

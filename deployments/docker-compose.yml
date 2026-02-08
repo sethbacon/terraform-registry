@@ -42,8 +42,8 @@ services:
 
       # Server configuration
       TFR_SERVER_HOST: 0.0.0.0
-      TFR_SERVER_PORT: 8080
-      TFR_SERVER_BASE_URL: http://localhost:8080
+      TFR_SERVER_PORT: 443
+      TFR_SERVER_BASE_URL: https://registry.local
 
       # Storage configuration (local filesystem)
       TFR_STORAGE_DEFAULT_BACKEND: local
@@ -60,7 +60,9 @@ services:
       TFR_MULTI_TENANCY_DEFAULT_ORGANIZATION: default
 
       # Security
-      TFR_SECURITY_TLS_ENABLED: "false"
+      TFR_SECURITY_TLS_ENABLED: "true"
+      TFR_SECURITY_TLS_CERT_FILE: /app/certs/server.crt
+      TFR_SECURITY_TLS_KEY_FILE: /app/certs/server.key
       TFR_SECURITY_RATE_LIMITING_ENABLED: "true"
 
       # Logging
@@ -71,15 +73,25 @@ services:
       TFR_TELEMETRY_ENABLED: "true"
       TFR_TELEMETRY_METRICS_ENABLED: "true"
       TFR_TELEMETRY_METRICS_PROMETHEUS_PORT: 9090
+
+      # Encryption key for SCM OAuth token storage (32 bytes for AES-256)
+      ENCRYPTION_KEY: "01234567890123456789012345678901"
+
+      # JWT secret for authentication (required - generate with: openssl rand -hex 32)
+      TFR_JWT_SECRET: "development-jwt-secret-change-in-production-01234567890"
+
+      # Development mode (enables auto-generated JWT secret if TFR_JWT_SECRET not set)
+      DEV_MODE: "true"
     ports:
-      - "8080:8080"  # HTTP API
+      - "443:443"    # HTTPS API
       - "9090:9090"  # Prometheus metrics
     volumes:
       - storage_data:/app/storage
+      - ../backend/certs:/app/certs:ro
       # Mount config file if you want to use file-based config
       # - ./config.yaml:/app/config.yaml:ro
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "--no-check-certificate", "https://localhost:443/health"]
       interval: 30s
       timeout: 3s
       retries: 3

@@ -25,8 +25,8 @@ func NewProviderRepository(db *sql.DB) *ProviderRepository {
 // CreateProvider inserts a new provider record
 func (r *ProviderRepository) CreateProvider(ctx context.Context, provider *models.Provider) error {
 	query := `
-		INSERT INTO providers (organization_id, namespace, type, description, source)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO providers (organization_id, namespace, type, description, source, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, created_at, updated_at
 	`
 
@@ -44,6 +44,7 @@ func (r *ProviderRepository) CreateProvider(ctx context.Context, provider *model
 		provider.Type,
 		provider.Description,
 		provider.Source,
+		provider.CreatedBy,
 	).Scan(&provider.ID, &provider.CreatedAt, &provider.UpdatedAt)
 
 	if err != nil {
@@ -58,9 +59,11 @@ func (r *ProviderRepository) CreateProvider(ctx context.Context, provider *model
 func (r *ProviderRepository) GetProvider(ctx context.Context, orgID, namespace, providerType string) (*models.Provider, error) {
 	// Query that matches either the specific org ID or NULL org ID (for mirrored/single-tenant providers)
 	query := `
-		SELECT id, organization_id, namespace, type, description, source, created_at, updated_at
-		FROM providers
-		WHERE (organization_id = $1 OR organization_id IS NULL) AND namespace = $2 AND type = $3
+		SELECT p.id, p.organization_id, p.namespace, p.type, p.description, p.source,
+		       p.created_by, p.created_at, p.updated_at, u.name as created_by_name
+		FROM providers p
+		LEFT JOIN users u ON p.created_by = u.id
+		WHERE (p.organization_id = $1 OR p.organization_id IS NULL) AND p.namespace = $2 AND p.type = $3
 		LIMIT 1
 	`
 
@@ -73,8 +76,10 @@ func (r *ProviderRepository) GetProvider(ctx context.Context, orgID, namespace, 
 		&provider.Type,
 		&provider.Description,
 		&provider.Source,
+		&provider.CreatedBy,
 		&provider.CreatedAt,
 		&provider.UpdatedAt,
+		&provider.CreatedByName,
 	)
 
 	if err != nil {
@@ -261,10 +266,12 @@ func (r *ProviderRepository) GetVersion(ctx context.Context, providerID, version
 // ListVersions retrieves all versions for a provider, sorted by semver (highest first)
 func (r *ProviderRepository) ListVersions(ctx context.Context, providerID string) ([]*models.ProviderVersion, error) {
 	query := `
-		SELECT id, provider_id, version, protocols, gpg_public_key, shasums_url, shasums_signature_url, published_by,
-		       COALESCE(deprecated, false), deprecated_at, deprecation_message, created_at
-		FROM provider_versions
-		WHERE provider_id = $1
+		SELECT pv.id, pv.provider_id, pv.version, pv.protocols, pv.gpg_public_key, pv.shasums_url, pv.shasums_signature_url,
+		       pv.published_by, u.name as published_by_name,
+		       COALESCE(pv.deprecated, false), pv.deprecated_at, pv.deprecation_message, pv.created_at
+		FROM provider_versions pv
+		LEFT JOIN users u ON pv.published_by = u.id
+		WHERE pv.provider_id = $1
 	`
 
 	rows, err := r.db.QueryContext(ctx, query, providerID)
@@ -287,6 +294,7 @@ func (r *ProviderRepository) ListVersions(ctx context.Context, providerID string
 			&v.ShasumURL,
 			&v.ShasumSignatureURL,
 			&v.PublishedBy,
+			&v.PublishedByName,
 			&v.Deprecated,
 			&v.DeprecatedAt,
 			&v.DeprecationMessage,
@@ -504,6 +512,24 @@ func (r *ProviderRepository) IncrementDownloadCount(ctx context.Context, platfor
 	return nil
 }
 
+// GetTotalDownloadCount returns the total download count for a provider (sum of all platforms across all versions)
+func (r *ProviderRepository) GetTotalDownloadCount(ctx context.Context, providerID string) (int64, error) {
+	query := `
+		SELECT COALESCE(SUM(pp.download_count), 0)
+		FROM provider_platforms pp
+		INNER JOIN provider_versions pv ON pp.provider_version_id = pv.id
+		WHERE pv.provider_id = $1
+	`
+
+	var totalDownloads int64
+	err := r.db.QueryRowContext(ctx, query, providerID).Scan(&totalDownloads)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get total download count: %w", err)
+	}
+
+	return totalDownloads, nil
+}
+
 // DeletePlatform deletes a specific platform binary
 func (r *ProviderRepository) DeletePlatform(ctx context.Context, platformID string) error {
 	query := `DELETE FROM provider_platforms WHERE id = $1`
@@ -535,7 +561,7 @@ func (r *ProviderRepository) SearchProviders(ctx context.Context, orgID, query, 
 	// Only filter by organization if orgID is provided (multi-tenant mode)
 	if orgID != "" {
 		argCount++
-		whereClause = fmt.Sprintf("WHERE organization_id = $%d", argCount)
+		whereClause = fmt.Sprintf("WHERE p.organization_id = $%d", argCount)
 		args = append(args, orgID)
 	} else {
 		whereClause = "WHERE 1=1" // No org filter in single-tenant mode
@@ -543,30 +569,32 @@ func (r *ProviderRepository) SearchProviders(ctx context.Context, orgID, query, 
 
 	if query != "" {
 		argCount++
-		whereClause += fmt.Sprintf(" AND (namespace ILIKE $%d OR type ILIKE $%d OR description ILIKE $%d)", argCount, argCount, argCount)
+		whereClause += fmt.Sprintf(" AND (p.namespace ILIKE $%d OR p.type ILIKE $%d OR p.description ILIKE $%d)", argCount, argCount, argCount)
 		args = append(args, "%"+query+"%")
 	}
 
 	if namespace != "" {
 		argCount++
-		whereClause += fmt.Sprintf(" AND namespace = $%d", argCount)
+		whereClause += fmt.Sprintf(" AND p.namespace = $%d", argCount)
 		args = append(args, namespace)
 	}
 
 	// Count total results
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM providers %s", whereClause)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM providers p %s", whereClause)
 	var total int
 	err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count providers: %w", err)
 	}
 
-	// Query with pagination
+	// Query with pagination and JOIN for created_by_name
 	searchQuery := fmt.Sprintf(`
-		SELECT id, organization_id, namespace, type, description, source, created_at, updated_at
-		FROM providers
+		SELECT p.id, p.organization_id, p.namespace, p.type, p.description, p.source,
+		       p.created_by, u.name as created_by_name, p.created_at, p.updated_at
+		FROM providers p
+		LEFT JOIN users u ON p.created_by = u.id
 		%s
-		ORDER BY created_at DESC
+		ORDER BY p.created_at DESC
 		LIMIT $%d OFFSET $%d
 	`, whereClause, argCount+1, argCount+2)
 
@@ -581,22 +609,24 @@ func (r *ProviderRepository) SearchProviders(ctx context.Context, orgID, query, 
 	var providers []*models.Provider
 	for rows.Next() {
 		p := &models.Provider{}
-		var orgID sql.NullString
+		var scannedOrgID sql.NullString
 		err := rows.Scan(
 			&p.ID,
-			&orgID,
+			&scannedOrgID,
 			&p.Namespace,
 			&p.Type,
 			&p.Description,
 			&p.Source,
+			&p.CreatedBy,
+			&p.CreatedByName,
 			&p.CreatedAt,
 			&p.UpdatedAt,
 		)
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to scan provider: %w", err)
 		}
-		if orgID.Valid {
-			p.OrganizationID = orgID.String
+		if scannedOrgID.Valid {
+			p.OrganizationID = scannedOrgID.String
 		}
 		providers = append(providers, p)
 	}

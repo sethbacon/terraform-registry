@@ -21,6 +21,15 @@ import {
   Alert,
   Stack,
   InputAdornment,
+  FormGroup,
+  FormControlLabel,
+  Checkbox,
+  Chip,
+  Tooltip,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -28,14 +37,21 @@ import {
   ContentCopy as CopyIcon,
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
 import api from '../../services/api';
-import { APIKey } from '../../types';
+import { APIKey, UserMembership } from '../../types';
+import { REGISTRY_HOST } from '../../config';
+import { useAuth } from '../../contexts/AuthContext';
+import { AVAILABLE_SCOPES } from '../../types/rbac';
 
 const APIKeysPage: React.FC = () => {
+  const { allowedScopes, roleTemplate, user } = useAuth();
   const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [memberships, setMemberships] = useState<UserMembership[]>([]);
+  const [membershipsLoading, setMembershipsLoading] = useState(true);
 
   // Dialog state
   const [openDialog, setOpenDialog] = useState(false);
@@ -50,12 +66,36 @@ const APIKeysPage: React.FC = () => {
     name: '',
     description: '',
     organization_id: '',
-    scopes: ['read', 'write'] as string[],
+    scopes: [] as string[],
   });
+
+  // Check if user has admin scope (which grants all permissions)
+  const hasAdminScope = allowedScopes.includes('admin');
+
+  // Get available scopes for this user
+  const availableScopes = hasAdminScope
+    ? AVAILABLE_SCOPES.map((s) => s.value)
+    : allowedScopes;
 
   useEffect(() => {
     loadAPIKeys();
-  }, []);
+    loadMemberships();
+  }, [user?.id]);
+
+  const loadMemberships = async () => {
+    if (!user?.id) return;
+    try {
+      setMembershipsLoading(true);
+      // Use self-access endpoint that doesn't require users:read scope
+      const userMemberships = await api.getCurrentUserMemberships();
+      setMemberships(userMemberships);
+    } catch (err) {
+      console.error('Failed to load memberships:', err);
+      setMemberships([]);
+    } finally {
+      setMembershipsLoading(false);
+    }
+  };
 
   const loadAPIKeys = async () => {
     try {
@@ -74,33 +114,63 @@ const APIKeysPage: React.FC = () => {
   };
 
   const handleOpenDialog = () => {
+    // Reset state when opening dialog
+    setNewKeyValue(null);
+    // Default to common read scopes that the user has access to
+    const defaultScopes = ['modules:read', 'providers:read'].filter((s) =>
+      availableScopes.includes(s)
+    );
+    // Default to first organization membership
+    const defaultOrgId = memberships.length > 0 ? memberships[0].organization_id : '';
     setFormData({
       name: '',
       description: '',
-      organization_id: '',
-      scopes: ['read', 'write'],
+      organization_id: defaultOrgId,
+      scopes: defaultScopes,
     });
-    setNewKeyValue(null);
+    setError(null);
     setOpenDialog(true);
   };
 
+  const handleScopeToggle = (scope: string) => {
+    setFormData((prev) => {
+      const newScopes = prev.scopes.includes(scope)
+        ? prev.scopes.filter((s) => s !== scope)
+        : [...prev.scopes, scope];
+      return { ...prev, scopes: newScopes };
+    });
+  };
+
+  const getScopeInfo = (scopeValue: string) => {
+    return AVAILABLE_SCOPES.find((s) => s.value === scopeValue) || {
+      value: scopeValue,
+      label: scopeValue,
+      description: '',
+    };
+  };
+
   const handleCloseDialog = () => {
+    // Just close the dialog - don't clear state yet
     setOpenDialog(false);
-    setFormData({ name: '', description: '', organization_id: '', scopes: ['read', 'write'] });
-    setNewKeyValue(null);
-    setError(null);
   };
 
   const handleCreateAPIKey = async () => {
     try {
       setError(null);
+      // Use selected organization or first membership
+      const orgId = formData.organization_id || (memberships.length > 0 ? memberships[0].organization_id : '');
+      if (!orgId) {
+        setError('You must be a member of an organization to create API keys.');
+        return;
+      }
       const response = await api.createAPIKey({
         name: formData.name,
-        organization_id: formData.organization_id || 'default',
+        organization_id: orgId,
+        description: formData.description || undefined,
         scopes: formData.scopes,
       });
       setNewKeyValue(response.key);
-      loadAPIKeys();
+      await loadAPIKeys();
     } catch (err: any) {
       console.error('Failed to create API key:', err);
       setError(err.response?.data?.error || 'Failed to create API key. Please try again.');
@@ -173,6 +243,12 @@ const APIKeysPage: React.FC = () => {
         </Alert>
       )}
 
+      {!membershipsLoading && memberships.length === 0 && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          You are not a member of any organization. Contact an administrator to add you to an organization before creating API keys.
+        </Alert>
+      )}
+
       {/* API Keys Table */}
       <Paper>
         {loading ? (
@@ -199,6 +275,7 @@ const APIKeysPage: React.FC = () => {
                   <TableCell>Name</TableCell>
                   <TableCell>Description</TableCell>
                   <TableCell>Key</TableCell>
+                  <TableCell>Created By</TableCell>
                   <TableCell>Last Used</TableCell>
                   <TableCell>Created</TableCell>
                   <TableCell align="right">Actions</TableCell>
@@ -207,45 +284,54 @@ const APIKeysPage: React.FC = () => {
               <TableBody>
                 {apiKeys.map((apiKey) => (
                   <TableRow key={apiKey.id}>
-                    <TableCell>
-                      <Typography fontWeight="medium">{apiKey.name}</Typography>
-                    </TableCell>
-                    <TableCell>{apiKey.description || '-'}</TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography
-                          variant="body2"
-                          sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
-                        >
-                          {showKeys.has(apiKey.id) ? apiKey.key_prefix + '...' : maskKey(apiKey.key_prefix + '...')}
-                        </Typography>
+                      <TableCell>
+                        <Typography fontWeight="medium">{apiKey.name || '-'}</Typography>
+                      </TableCell>
+                      <TableCell>{apiKey.description || '-'}</TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
+                          >
+                            {showKeys.has(apiKey.id)
+                              ? (apiKey.key_prefix ? apiKey.key_prefix + '...' : '-')
+                              : (apiKey.key_prefix ? maskKey(apiKey.key_prefix + '...') : '-')}
+                          </Typography>
+                          {apiKey.key_prefix && (
+                            <IconButton
+                              size="small"
+                              onClick={() => toggleShowKey(apiKey.id)}
+                            >
+                              {showKeys.has(apiKey.id) ? (
+                                <VisibilityOffIcon fontSize="small" />
+                              ) : (
+                                <VisibilityIcon fontSize="small" />
+                              )}
+                            </IconButton>
+                          )}
+                        </Box>
+                      </TableCell>
+                      <TableCell>{apiKey.user_name || '-'}</TableCell>
+                      <TableCell>
+                        {apiKey.last_used_at && !isNaN(Date.parse(apiKey.last_used_at))
+                          ? new Date(apiKey.last_used_at).toLocaleDateString()
+                          : 'Never'}
+                      </TableCell>
+                      <TableCell>
+                        {apiKey.created_at && !isNaN(Date.parse(apiKey.created_at))
+                          ? new Date(apiKey.created_at).toLocaleDateString()
+                          : '-'}
+                      </TableCell>
+                      <TableCell align="right">
                         <IconButton
                           size="small"
-                          onClick={() => toggleShowKey(apiKey.id)}
+                          onClick={() => handleDeleteClick(apiKey)}
+                          color="error"
                         >
-                          {showKeys.has(apiKey.id) ? (
-                            <VisibilityOffIcon fontSize="small" />
-                          ) : (
-                            <VisibilityIcon fontSize="small" />
-                          )}
+                          <DeleteIcon />
                         </IconButton>
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      {apiKey.last_used_at
-                        ? new Date(apiKey.last_used_at).toLocaleDateString()
-                        : 'Never'}
-                    </TableCell>
-                    <TableCell>{new Date(apiKey.created_at).toLocaleDateString()}</TableCell>
-                    <TableCell align="right">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDeleteClick(apiKey)}
-                        color="error"
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </TableCell>
+                      </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -255,7 +341,13 @@ const APIKeysPage: React.FC = () => {
       </Paper>
 
       {/* Create API Key Dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+      <Dialog 
+        open={openDialog} 
+        onClose={newKeyValue ? undefined : handleCloseDialog}
+        disableEscapeKeyDown={!!newKeyValue}
+        maxWidth="sm" 
+        fullWidth
+      >
         <DialogTitle>Create API Key</DialogTitle>
         <DialogContent>
           {newKeyValue ? (
@@ -288,6 +380,39 @@ const APIKeysPage: React.FC = () => {
             </Box>
           ) : (
             <Stack spacing={3} sx={{ mt: 2 }}>
+              {!roleTemplate && (
+                <Alert severity="warning" icon={<InfoIcon />}>
+                  You don't have a role template assigned. Contact an administrator to assign a role
+                  before creating API keys.
+                </Alert>
+              )}
+              {roleTemplate && (
+                <Alert severity="info" icon={<InfoIcon />}>
+                  Your role: <strong>{roleTemplate.display_name}</strong>. You can only create API keys
+                  with scopes that match your role permissions.
+                </Alert>
+              )}
+              {memberships.length === 0 && (
+                <Alert severity="error">
+                  You must be a member of an organization to create API keys.
+                </Alert>
+              )}
+              {memberships.length > 0 && (
+                <FormControl fullWidth>
+                  <InputLabel>Organization</InputLabel>
+                  <Select
+                    value={formData.organization_id}
+                    onChange={(e) => setFormData({ ...formData, organization_id: e.target.value })}
+                    label="Organization"
+                  >
+                    {memberships.map((m) => (
+                      <MenuItem key={m.organization_id} value={m.organization_id}>
+                        {m.organization_name} {m.role_template_display_name && `(${m.role_template_display_name})`}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
               <TextField
                 label="Name"
                 value={formData.name}
@@ -304,6 +429,62 @@ const APIKeysPage: React.FC = () => {
                 rows={3}
                 fullWidth
               />
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Scopes
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                  Select the permissions for this API key. You can only select scopes within your role's permissions.
+                </Typography>
+                {availableScopes.length === 0 ? (
+                  <Alert severity="error">
+                    No scopes available. Please contact an administrator to assign you a role.
+                  </Alert>
+                ) : (
+                  <FormGroup>
+                    {availableScopes.map((scope) => {
+                      const info = getScopeInfo(scope);
+                      return (
+                        <Tooltip key={scope} title={info.description} placement="right">
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={formData.scopes.includes(scope)}
+                                onChange={() => handleScopeToggle(scope)}
+                                size="small"
+                              />
+                            }
+                            label={
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography variant="body2">{info.label}</Typography>
+                                <Chip
+                                  label={scope}
+                                  size="small"
+                                  sx={{
+                                    height: 20,
+                                    fontSize: '0.7rem',
+                                    backgroundColor:
+                                      scope === 'admin'
+                                        ? 'error.light'
+                                        : scope.includes(':write') || scope.includes(':manage')
+                                        ? 'warning.light'
+                                        : 'success.light',
+                                  }}
+                                />
+                              </Box>
+                            }
+                          />
+                        </Tooltip>
+                      );
+                    })}
+                  </FormGroup>
+                )}
+                {formData.scopes.length === 0 && availableScopes.length > 0 && (
+                  <Typography variant="caption" color="error">
+                    Please select at least one scope
+                  </Typography>
+                )}
+              </Box>
             </Stack>
           )}
         </DialogContent>
@@ -315,7 +496,16 @@ const APIKeysPage: React.FC = () => {
           ) : (
             <>
               <Button onClick={handleCloseDialog}>Cancel</Button>
-              <Button onClick={handleCreateAPIKey} variant="contained">
+              <Button
+                onClick={handleCreateAPIKey}
+                variant="contained"
+                disabled={
+                  !formData.name ||
+                  formData.scopes.length === 0 ||
+                  availableScopes.length === 0 ||
+                  memberships.length === 0
+                }
+              >
                 Create
               </Button>
             </>
@@ -352,14 +542,15 @@ const APIKeysPage: React.FC = () => {
             sx={{
               mt: 2,
               p: 2,
-              backgroundColor: '#f5f5f5',
+              backgroundColor: (theme) => theme.palette.mode === 'dark' ? '#2d2d2d' : '#f5f5f5',
+              color: (theme) => theme.palette.mode === 'dark' ? '#e6e6e6' : '#1e1e1e',
               borderRadius: 1,
               overflow: 'auto',
               fontSize: '0.875rem',
             }}
           >
             {`# ~/.terraformrc (Unix) or %APPDATA%/terraform.rc (Windows)
-credentials "${window.location.host}" {
+credentials "${REGISTRY_HOST}" {
   token = "YOUR_API_KEY_HERE"
 }`}
           </Box>

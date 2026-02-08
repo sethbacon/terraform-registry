@@ -86,9 +86,12 @@ func ListVersionsHandler(db *sql.DB, cfg *config.Config) gin.HandlerFunc {
 				versionData["readme"] = *v.Readme
 			}
 
-			// Include source URL if present
+			// Include published_by info for audit tracking
 			if v.PublishedBy != nil {
 				versionData["published_by"] = *v.PublishedBy
+			}
+			if v.PublishedByName != nil {
+				versionData["published_by_name"] = *v.PublishedByName
 			}
 
 			versionsList[i] = versionData

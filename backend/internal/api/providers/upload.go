@@ -173,6 +173,12 @@ func UploadHandler(db *sql.DB, storageBackend storage.Storage, cfg *config.Confi
 			if source != "" {
 				provider.Source = &source
 			}
+			// Set created_by for audit tracking
+			if userID, exists := c.Get("user_id"); exists {
+				if uid, ok := userID.(string); ok {
+					provider.CreatedBy = &uid
+				}
+			}
 
 			if err := providerRepo.CreateProvider(c.Request.Context(), provider); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{
@@ -216,7 +222,12 @@ func UploadHandler(db *sql.DB, storageBackend storage.Storage, cfg *config.Confi
 				GPGPublicKey:        gpgPublicKey,
 				ShasumURL:           "",
 				ShasumSignatureURL:  "",
-				// PublishedBy will be set when auth is implemented in Phase 4
+			}
+			// Set published_by for audit tracking
+			if userID, exists := c.Get("user_id"); exists {
+				if uid, ok := userID.(string); ok {
+					providerVersion.PublishedBy = &uid
+				}
 			}
 
 			if err := providerRepo.CreateVersion(c.Request.Context(), providerVersion); err != nil {

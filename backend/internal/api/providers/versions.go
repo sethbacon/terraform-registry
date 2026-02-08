@@ -73,9 +73,11 @@ func ListVersionsHandler(db *sql.DB, cfg *config.Config) gin.HandlerFunc {
 				return
 			}
 
-			// Format platforms
+			// Format platforms and sum downloads
 			platformsList := make([]gin.H, 0, len(platforms))
+			var versionDownloadCount int64
 			for _, p := range platforms {
+				versionDownloadCount += p.DownloadCount
 				platformsList = append(platformsList, gin.H{
 					"id":             p.ID,
 					"os":             p.OS,
@@ -87,18 +89,26 @@ func ListVersionsHandler(db *sql.DB, cfg *config.Config) gin.HandlerFunc {
 			}
 
 			versionData := gin.H{
-				"id":           v.ID,
-				"version":      v.Version,
-				"protocols":    v.Protocols,
-				"platforms":    platformsList,
-				"published_at": v.CreatedAt.Format(time.RFC3339),
-				"deprecated":   v.Deprecated,
+				"id":             v.ID,
+				"version":        v.Version,
+				"protocols":      v.Protocols,
+				"platforms":      platformsList,
+				"published_at":   v.CreatedAt.Format(time.RFC3339),
+				"deprecated":     v.Deprecated,
+				"download_count": versionDownloadCount,
 			}
 			if v.DeprecatedAt != nil {
 				versionData["deprecated_at"] = v.DeprecatedAt.Format(time.RFC3339)
 			}
 			if v.DeprecationMessage != nil {
 				versionData["deprecation_message"] = *v.DeprecationMessage
+			}
+			// Include published_by info for audit tracking
+			if v.PublishedBy != nil {
+				versionData["published_by"] = *v.PublishedBy
+			}
+			if v.PublishedByName != nil {
+				versionData["published_by_name"] = *v.PublishedByName
 			}
 			versionsList = append(versionsList, versionData)
 		}

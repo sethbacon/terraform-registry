@@ -8,12 +8,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- Phase 5B: Azure DevOps pipeline extension for publishing
-- Phase 5C: Provider network mirroring with enhanced security roles (see IMPLEMENTATION_PLAN.md Phase 5C)
+
+- Phase 5B: Azure DevOps pipeline extension for publishing (deferred)
 - Phase 6: Azure Blob Storage and S3-compatible storage backends
 - Phase 6: Deployment configurations (Kubernetes, Helm, Azure Container Apps)
 - Phase 7: Comprehensive documentation and testing suite
 - Phase 8: Production polish (monitoring, observability, security hardening)
+
+## [0.9.0] - 2026-02-06 - Session 15
+
+### Added
+
+- **Provider Network Mirroring - Complete Implementation (Phase 5C)**
+  - Full `syncProvider()` implementation with actual provider binary downloads
+  - Downloads provider binaries from upstream registries (registry.terraform.io)
+  - Stores binaries in local storage backend
+  - Creates provider, version, and platform records in database
+  - SHA256 checksum verification for all downloaded files
+  - GPG signature verification using ProtonMail/go-crypto library
+  - Mirrored provider tracking tables (migration 011):
+    - `mirrored_providers`: tracks which providers came from which mirror
+    - `mirrored_provider_versions`: tracks version sync status and verification
+  - Organization support for mirror configurations
+  - Connected TriggerSync API to background sync job
+  - Enhanced RBAC with mirror-specific scopes:
+    - `mirrors:read`: View mirror configurations and sync status
+    - `mirrors:manage`: Create, update, delete mirrors and trigger syncs
+  - Audit logging for all mirror operations via middleware
+  - Mirror Management UI page (frontend):
+    - List all mirror configurations with status
+    - Create/edit/delete mirror configurations
+    - Trigger manual sync
+    - View sync status and history
+    - Namespace and provider filters
+    - Navigation in admin sidebar
+
+### Milestone
+
+- **Phase 5C Complete**: Provider network mirroring fully implemented with GPG verification, RBAC, audit logging, and UI
+
+## [0.8.0] - 2026-02-04 - Session 14
+
+### Added
+
+- **Provider Network Mirroring Infrastructure (Phase 5C Session 14)**
+  - Database migration 010: `mirror_configurations` and `mirror_sync_history` tables
+  - Upstream registry client with Terraform Provider Registry Protocol support
+  - Service discovery for upstream registries
+  - Provider version enumeration from upstream
+  - Package download URL resolution
+  - Mirror configuration models and repository layer
+  - Full CRUD API endpoints for mirror management (`/api/v1/admin/mirrors/*`)
+  - Background sync job infrastructure with 10-minute interval checks
+  - Sync history tracking and status monitoring
+  - Framework ready for actual provider downloads
+
+### Fixed
+
+- Fixed migration system: renamed migrations to `.up.sql`/`.down.sql` convention
+- Created `fix-migration` utility for cleaning dirty migration states
 
 ## [0.7.0] - 2026-02-04 - Session 13
 
@@ -276,7 +329,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Request validation utilities
 - Checksum utilities for file integrity
 
-[Unreleased]: https://github.com/yourusername/terraform-registry/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/yourusername/terraform-registry/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/yourusername/terraform-registry/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/yourusername/terraform-registry/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/yourusername/terraform-registry/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/yourusername/terraform-registry/compare/v0.5.1...v0.6.0
+[0.5.1]: https://github.com/yourusername/terraform-registry/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/yourusername/terraform-registry/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/yourusername/terraform-registry/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/yourusername/terraform-registry/compare/v0.2.0...v0.3.0

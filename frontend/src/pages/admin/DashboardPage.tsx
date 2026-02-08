@@ -20,6 +20,7 @@ import {
   Key,
 } from '@mui/icons-material';
 import api from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface StatCard {
   title: string;
@@ -27,10 +28,27 @@ interface StatCard {
   icon: React.ReactNode;
   color: string;
   route: string;
+  scope: string | null; // Required scope to view this card
+}
+
+interface QuickAction {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  color: string;
+  route: string;
+  state?: object;
+  scope: string | null; // Required scope to view this action
 }
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const { allowedScopes } = useAuth();
+
+  // Helper to check if user has a specific scope (or admin which grants all)
+  const hasScope = (scope: string) => {
+    return allowedScopes.includes('admin') || allowedScopes.includes(scope);
+  };
   const [stats, setStats] = useState<{
     totalModules: number;
     totalProviders: number;
@@ -151,13 +169,14 @@ const DashboardPage: React.FC = () => {
     );
   }
 
-  const statCards: StatCard[] = [
+  const allStatCards: StatCard[] = [
     {
       title: 'Total Modules',
       value: stats.totalModules,
       icon: <ViewModule sx={{ fontSize: 40 }} />,
       color: '#5C4EE5',
       route: '/modules',
+      scope: 'modules:read',
     },
     {
       title: 'Total Providers',
@@ -165,20 +184,7 @@ const DashboardPage: React.FC = () => {
       icon: <Extension sx={{ fontSize: 40 }} />,
       color: '#00D9C0',
       route: '/providers',
-    },
-    {
-      title: 'Total Users',
-      value: stats.totalUsers,
-      icon: <People sx={{ fontSize: 40 }} />,
-      color: '#FF6B6B',
-      route: '/admin/users',
-    },
-    {
-      title: 'Organizations',
-      value: stats.totalOrganizations,
-      icon: <Business sx={{ fontSize: 40 }} />,
-      color: '#4ECDC4',
-      route: '/admin/organizations',
+      scope: 'providers:read',
     },
     {
       title: 'Total Downloads',
@@ -186,6 +192,23 @@ const DashboardPage: React.FC = () => {
       icon: <Download sx={{ fontSize: 40 }} />,
       color: '#FFB74D',
       route: '/modules',
+      scope: null, // Always visible
+    },
+    {
+      title: 'Organizations',
+      value: stats.totalOrganizations,
+      icon: <Business sx={{ fontSize: 40 }} />,
+      color: '#4ECDC4',
+      route: '/admin/organizations',
+      scope: 'organizations:read',
+    },
+    {
+      title: 'Total Users',
+      value: stats.totalUsers,
+      icon: <People sx={{ fontSize: 40 }} />,
+      color: '#FF6B6B',
+      route: '/admin/users',
+      scope: 'users:read',
     },
     {
       title: 'SCM Providers',
@@ -193,8 +216,61 @@ const DashboardPage: React.FC = () => {
       icon: <GitHub sx={{ fontSize: 40 }} />,
       color: '#6E5494',
       route: '/admin/scm-providers',
+      scope: 'scm:read',
     },
   ];
+
+  // Filter stat cards based on user's scopes
+  const statCards = allStatCards.filter(card => card.scope === null || hasScope(card.scope));
+
+  // Quick actions with scope requirements
+  const allQuickActions: QuickAction[] = [
+    {
+      title: 'Upload Module',
+      description: 'Upload a new Terraform module to your registry',
+      icon: <CloudUpload sx={{ fontSize: 40, color: '#5C4EE5', mb: 2 }} />,
+      color: '#5C4EE5',
+      route: '/admin/upload',
+      state: { tab: 0 },
+      scope: 'modules:write',
+    },
+    {
+      title: 'Upload Provider',
+      description: 'Upload a new Terraform provider to your registry',
+      icon: <CloudUpload sx={{ fontSize: 40, color: '#00D9C0', mb: 2 }} />,
+      color: '#00D9C0',
+      route: '/admin/upload',
+      state: { tab: 1 },
+      scope: 'providers:write',
+    },
+    {
+      title: 'Manage Users',
+      description: 'Add, edit, or remove users and their permissions',
+      icon: <People sx={{ fontSize: 40, color: '#FF6B6B', mb: 2 }} />,
+      color: '#FF6B6B',
+      route: '/admin/users',
+      scope: 'users:read',
+    },
+    {
+      title: 'API Keys',
+      description: 'Generate and manage API keys for Terraform CLI',
+      icon: <Key sx={{ fontSize: 40, color: '#FFB74D', mb: 2 }} />,
+      color: '#FFB74D',
+      route: '/admin/apikeys',
+      scope: null, // Self-service, always visible
+    },
+    {
+      title: 'SCM Providers',
+      description: 'Connect GitHub, Azure DevOps, or GitLab for automated publishing',
+      icon: <GitHub sx={{ fontSize: 40, color: '#6E5494', mb: 2 }} />,
+      color: '#6E5494',
+      route: '/admin/scm-providers',
+      scope: 'scm:read',
+    },
+  ];
+
+  // Filter quick actions based on user's scopes
+  const quickActions = allQuickActions.filter(action => action.scope === null || hasScope(action.scope));
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -248,121 +324,39 @@ const DashboardPage: React.FC = () => {
       </Grid>
 
       {/* Quick Actions */}
-      <Typography variant="h5" gutterBottom sx={{ mt: 4, mb: 2 }}>
-        Quick Actions
-      </Typography>
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Paper 
-            onClick={() => navigate('/admin/upload', { state: { tab: 0 } })}
-            sx={{ 
-              p: 3, 
-              cursor: 'pointer',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              '&:hover': {
-                transform: 'translateY(-2px)',
-                boxShadow: 4,
-              },
-            }}
-          >
-            <CloudUpload sx={{ fontSize: 40, color: '#5C4EE5', mb: 2 }} />
-            <Typography variant="h6" gutterBottom>
-              Upload Module
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Upload a new Terraform module to your registry
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <Paper 
-            onClick={() => navigate('/admin/upload', { state: { tab: 1 } })}
-            sx={{ 
-              p: 3, 
-              cursor: 'pointer',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              '&:hover': {
-                transform: 'translateY(-2px)',
-                boxShadow: 4,
-              },
-            }}
-          >
-            <CloudUpload sx={{ fontSize: 40, color: '#00D9C0', mb: 2 }} />
-            <Typography variant="h6" gutterBottom>
-              Upload Provider
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Upload a new Terraform provider to your registry
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <Paper 
-            onClick={() => navigate('/admin/users')}
-            sx={{ 
-              p: 3, 
-              cursor: 'pointer',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              '&:hover': {
-                transform: 'translateY(-2px)',
-                boxShadow: 4,
-              },
-            }}
-          >
-            <People sx={{ fontSize: 40, color: '#FF6B6B', mb: 2 }} />
-            <Typography variant="h6" gutterBottom>
-              Manage Users
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Add, edit, or remove users and their permissions
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <Paper 
-            onClick={() => navigate('/admin/apikeys')}
-            sx={{ 
-              p: 3, 
-              cursor: 'pointer',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              '&:hover': {
-                transform: 'translateY(-2px)',
-                boxShadow: 4,
-              },
-            }}
-          >
-            <Key sx={{ fontSize: 40, color: '#FFB74D', mb: 2 }} />
-            <Typography variant="h6" gutterBottom>
-              API Keys
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Generate and manage API keys for Terraform CLI
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <Paper 
-            onClick={() => navigate('/admin/scm-providers')}
-            sx={{ 
-              p: 3, 
-              cursor: 'pointer',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              '&:hover': {
-                transform: 'translateY(-2px)',
-                boxShadow: 4,
-              },
-            }}
-          >
-            <GitHub sx={{ fontSize: 40, color: '#6E5494', mb: 2 }} />
-            <Typography variant="h6" gutterBottom>
-              SCM Providers
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Connect GitHub, Azure DevOps, or GitLab for automated publishing
-            </Typography>
-          </Paper>
-        </Grid>
-      </Grid>
+      {quickActions.length > 0 && (
+        <>
+          <Typography variant="h5" gutterBottom sx={{ mt: 4, mb: 2 }}>
+            Quick Actions
+          </Typography>
+          <Grid container spacing={3}>
+            {quickActions.map((action, index) => (
+              <Grid item xs={12} md={6} key={index}>
+                <Paper
+                  onClick={() => navigate(action.route, action.state ? { state: action.state } : undefined)}
+                  sx={{
+                    p: 3,
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s, box-shadow 0.2s',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: 4,
+                    },
+                  }}
+                >
+                  {action.icon}
+                  <Typography variant="h6" gutterBottom>
+                    {action.title}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {action.description}
+                  </Typography>
+                </Paper>
+              </Grid>
+            ))}
+          </Grid>
+        </>
+      )}
     </Container>
   );
 };

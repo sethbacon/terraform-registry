@@ -18,6 +18,7 @@ import {
   Divider,
   useTheme,
   useMediaQuery,
+  Tooltip,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -28,24 +29,34 @@ import {
   People,
   Business,
   Key,
-  CloudUpload,
   Home,
   GitHub,
   CloudDownload,
+  Brightness4,
+  Brightness7,
+  Shield,
 } from '@mui/icons-material';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useThemeMode } from '../contexts/ThemeContext';
+import DevUserSwitcher from './DevUserSwitcher';
 
 const drawerWidth = 240;
 
 const Layout = () => {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, allowedScopes } = useAuth();
+  const { mode, toggleTheme } = useThemeMode();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  
+
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Helper to check if user has a specific scope (or admin which grants all)
+  const hasScope = (scope: string) => {
+    return allowedScopes.includes('admin') || allowedScopes.includes(scope);
+  };
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -71,15 +82,20 @@ const Layout = () => {
     { text: 'Providers', icon: <Extension />, path: '/providers' },
   ];
 
+  // Admin items with required scopes - items only shown if user has the scope
+  const allAdminItems = [
+    { text: 'Dashboard', icon: <Dashboard />, path: '/admin', scope: null }, // Always visible when authenticated
+    { text: 'Organizations', icon: <Business />, path: '/admin/organizations', scope: 'organizations:read' },
+    { text: 'Roles', icon: <Shield />, path: '/admin/roles', scope: 'users:read' },
+    { text: 'Users', icon: <People />, path: '/admin/users', scope: 'users:read' },
+    { text: 'API Keys', icon: <Key />, path: '/admin/apikeys', scope: null }, // Self-service, always visible
+    { text: 'SCM Providers', icon: <GitHub />, path: '/admin/scm-providers', scope: 'scm:read' },
+    { text: 'Provider Mirrors', icon: <CloudDownload />, path: '/admin/mirrors', scope: 'mirrors:read' },
+  ];
+
+  // Filter admin items based on user's scopes
   const adminItems = isAuthenticated
-    ? [
-        { text: 'Dashboard', icon: <Dashboard />, path: '/admin' },
-        { text: 'Organizations', icon: <Business />, path: '/admin/organizations' },
-        { text: 'Users', icon: <People />, path: '/admin/users' },
-        { text: 'API Keys', icon: <Key />, path: '/admin/apikeys' },
-        { text: 'SCM Providers', icon: <GitHub />, path: '/admin/scm-providers' },
-        { text: 'Provider Mirrors', icon: <CloudDownload />, path: '/admin/mirrors' },
-      ]
+    ? allAdminItems.filter(item => item.scope === null || hasScope(item.scope))
     : [];
 
   const drawer = (
@@ -141,6 +157,17 @@ const Layout = () => {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Terraform Registry
           </Typography>
+          {isAuthenticated && <DevUserSwitcher />}
+          <Tooltip title={mode === 'dark' ? 'Light mode' : 'Dark mode'}>
+            <IconButton
+              color="inherit"
+              onClick={toggleTheme}
+              aria-label="toggle dark mode"
+              sx={{ mr: 1 }}
+            >
+              {mode === 'dark' ? <Brightness7 /> : <Brightness4 />}
+            </IconButton>
+          </Tooltip>
           {isAuthenticated ? (
             <div>
               <IconButton

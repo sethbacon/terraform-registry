@@ -110,8 +110,15 @@ func (h *StatsHandler) GetDashboardStats(c *gin.Context) {
 		stats.SCMProviders = 0
 	}
 
-	// Downloads tracking not yet implemented - set to 0
-	stats.Downloads = 0
+	// Get total downloads (sum of module version downloads and provider platform downloads)
+	var moduleDownloads, providerDownloads int64
+	if err := h.db.QueryRowContext(c.Request.Context(), "SELECT COALESCE(SUM(download_count), 0) FROM module_versions").Scan(&moduleDownloads); err != nil {
+		moduleDownloads = 0
+	}
+	if err := h.db.QueryRowContext(c.Request.Context(), "SELECT COALESCE(SUM(download_count), 0) FROM provider_platforms").Scan(&providerDownloads); err != nil {
+		providerDownloads = 0
+	}
+	stats.Downloads = moduleDownloads + providerDownloads
 
 	c.JSON(http.StatusOK, stats)
 }

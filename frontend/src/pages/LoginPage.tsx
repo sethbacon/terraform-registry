@@ -18,25 +18,22 @@ const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const isDev = import.meta.env.DEV;
 
-  const handleDevLogin = () => {
-    // Store the development API key
+  const handleDevLogin = async () => {
+    // SECURITY: Store the development API key - user data will be fetched from API
+    // This ensures scopes and permissions always come from the server
     localStorage.setItem('auth_token', 'dev_qHlTX4JvjK1yVUgRukLlgiwFQmFOiHdEhHYVJNfhNXc');
-    
-    // Mock user for development
-    const mockUser = {
-      id: 'd3d54cbf-071b-4835-9563-529681a60a99', // Actual user ID from database
-      email: 'admin@dev.local',
-      username: 'Dev Admin',
-      role: 'admin' as const,
-      organization_id: 'cb1726d0-187b-4035-828f-15a70b3f93a1', // bconline organization
-      organization_name: 'bconline',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    console.log('Dev login: setting user and API key');
-    login(mockUser);
-    console.log('Dev login: navigating to home');
-    setTimeout(() => navigate('/'), 100); // Small delay to ensure state is set
+
+    // Clear any cached user data to force fresh fetch from API
+    localStorage.removeItem('user');
+    localStorage.removeItem('role_template');
+    localStorage.removeItem('allowed_scopes');
+
+    console.log('Dev login: setting API key, will fetch user from API');
+    // Pass a placeholder - login() will fetch actual user data from API
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await login({} as any);
+    console.log('Dev login: user data fetched, navigating to home');
+    navigate('/');
   };
 
   const handleOIDCLogin = () => {
