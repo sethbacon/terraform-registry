@@ -35,6 +35,7 @@ import {
   Brightness4,
   Brightness7,
   Shield,
+  Storage,
 } from '@mui/icons-material';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -91,6 +92,7 @@ const Layout = () => {
     { text: 'API Keys', icon: <Key />, path: '/admin/apikeys', scope: null }, // Self-service, always visible
     { text: 'SCM Providers', icon: <GitHub />, path: '/admin/scm-providers', scope: 'scm:read' },
     { text: 'Provider Mirrors', icon: <CloudDownload />, path: '/admin/mirrors', scope: 'mirrors:read' },
+    { text: 'Storage', icon: <Storage />, path: '/admin/storage', scope: 'admin' }, // Admin only
   ];
 
   // Filter admin items based on user's scopes

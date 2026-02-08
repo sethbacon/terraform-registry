@@ -51,6 +51,7 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	sqlxDB := sqlx.NewDb(db, "postgres")
 	scmRepo := repositories.NewSCMRepository(sqlxDB)
 	mirrorRepo := repositories.NewMirrorRepository(sqlxDB)
+	storageConfigRepo := repositories.NewStorageConfigRepository(sqlxDB)
 
 	// Initialize mirror sync job
 	mirrorSyncJob := jobs.NewMirrorSyncJob(mirrorRepo, providerRepo, storageBackend)
@@ -142,6 +143,9 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	scmOAuthHandlers := admin.NewSCMOAuthHandlers(cfg, scmRepo, userRepo, tokenCipher)
 	scmLinkingHandler := modules.NewSCMLinkingHandler(scmRepo, moduleRepo, tokenCipher, cfg.Server.BaseURL)
 
+	// Initialize storage configuration handlers
+	storageHandlers := admin.NewStorageHandlers(cfg, storageConfigRepo, tokenCipher)
+
 	// Initialize SCM publisher service
 	scmPublisher := services.NewSCMPublisher(scmRepo, moduleRepo, storageBackend, tokenCipher)
 	scmWebhookHandler := webhooks.NewSCMWebhookHandler(scmRepo, scmPublisher)
@@ -154,6 +158,10 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	// Admin API endpoints
 	apiV1 := router.Group("/api/v1")
 	{
+		// Setup status endpoint (public, no auth required)
+		// This allows the frontend to check if initial setup is required
+		apiV1.GET("/setup/status", storageHandlers.GetSetupStatus)
+
 		// Public authentication endpoints (no auth required, but rate limited)
 		authGroup := apiV1.Group("/auth")
 		authGroup.Use(middleware.RateLimitMiddleware(authRateLimiter))
@@ -358,6 +366,20 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 				policiesGroup.PUT("/:id", middleware.RequireScope(auth.ScopeAdmin), rbacHandlers.UpdateMirrorPolicy)
 				policiesGroup.DELETE("/:id", middleware.RequireScope(auth.ScopeAdmin), rbacHandlers.DeleteMirrorPolicy)
 				policiesGroup.POST("/evaluate", middleware.RequireScope(auth.ScopeMirrorsRead), rbacHandlers.EvaluatePolicy)
+			}
+
+			// Storage Configuration management (requires admin scope)
+			storageGroup := authenticatedGroup.Group("/storage")
+			storageGroup.Use(middleware.RequireScope(auth.ScopeAdmin))
+			{
+				storageGroup.GET("/config", storageHandlers.GetActiveStorageConfig)
+				storageGroup.GET("/configs", storageHandlers.ListStorageConfigs)
+				storageGroup.GET("/configs/:id", storageHandlers.GetStorageConfig)
+				storageGroup.POST("/configs", storageHandlers.CreateStorageConfig)
+				storageGroup.PUT("/configs/:id", storageHandlers.UpdateStorageConfig)
+				storageGroup.DELETE("/configs/:id", storageHandlers.DeleteStorageConfig)
+				storageGroup.POST("/configs/:id/activate", storageHandlers.ActivateStorageConfig)
+				storageGroup.POST("/configs/test", storageHandlers.TestStorageConfig)
 			}
 		}
 

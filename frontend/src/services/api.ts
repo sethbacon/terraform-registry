@@ -784,6 +784,57 @@ class ApiClient {
     const response = await this.client.post(`/api/v1/dev/impersonate/${userId}`);
     return response.data;
   }
+
+  // ============================================================================
+  // Storage Configuration
+  // ============================================================================
+
+  async getSetupStatus(): Promise<import('../types').SetupStatus> {
+    const response = await this.client.get('/api/v1/setup/status');
+    return response.data;
+  }
+
+  async getActiveStorageConfig(): Promise<import('../types').StorageConfigResponse> {
+    const response = await this.client.get('/api/v1/storage/config');
+    return response.data;
+  }
+
+  async listStorageConfigs(): Promise<import('../types').StorageConfigResponse[]> {
+    const response = await this.client.get('/api/v1/storage/configs');
+    return response.data;
+  }
+
+  async getStorageConfig(id: string): Promise<import('../types').StorageConfigResponse> {
+    const response = await this.client.get(`/api/v1/storage/configs/${id}`);
+    return response.data;
+  }
+
+  async createStorageConfig(data: import('../types').StorageConfigInput): Promise<import('../types').StorageConfigResponse> {
+    const response = await this.client.post('/api/v1/storage/configs', data);
+    return response.data;
+  }
+
+  async updateStorageConfig(
+    id: string,
+    data: import('../types').StorageConfigInput
+  ): Promise<import('../types').StorageConfigResponse> {
+    const response = await this.client.put(`/api/v1/storage/configs/${id}`, data);
+    return response.data;
+  }
+
+  async deleteStorageConfig(id: string): Promise<void> {
+    await this.client.delete(`/api/v1/storage/configs/${id}`);
+  }
+
+  async activateStorageConfig(id: string): Promise<{ message: string; config: import('../types').StorageConfigResponse }> {
+    const response = await this.client.post(`/api/v1/storage/configs/${id}/activate`);
+    return response.data;
+  }
+
+  async testStorageConfig(data: import('../types').StorageConfigInput): Promise<{ success: boolean; message: string }> {
+    const response = await this.client.post('/api/v1/storage/configs/test', data);
+    return response.data;
+  }
 }
 
 export const apiClient = new ApiClient();

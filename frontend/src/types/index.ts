@@ -193,3 +193,86 @@ export interface AuthContextType {
   refreshToken: () => Promise<void>;
   setToken: (token: string) => void; // For dev mode impersonation
 }
+
+// Storage Configuration Types
+export type StorageBackendType = 'local' | 'azure' | 's3' | 'gcs';
+
+export interface StorageConfigResponse {
+  id: string;
+  backend_type: StorageBackendType;
+  is_active: boolean;
+
+  // Local storage settings
+  local_base_path?: string;
+  local_serve_directly?: boolean;
+
+  // Azure Blob Storage settings
+  azure_account_name?: string;
+  azure_account_key_set: boolean;
+  azure_container_name?: string;
+  azure_cdn_url?: string;
+
+  // S3 settings
+  s3_endpoint?: string;
+  s3_region?: string;
+  s3_bucket?: string;
+  s3_auth_method?: string;
+  s3_access_key_id_set: boolean;
+  s3_secret_access_key_set: boolean;
+  s3_role_arn?: string;
+  s3_role_session_name?: string;
+  s3_external_id?: string;
+  s3_web_identity_token_file?: string;
+
+  // GCS settings
+  gcs_bucket?: string;
+  gcs_project_id?: string;
+  gcs_auth_method?: string;
+  gcs_credentials_file?: string;
+  gcs_credentials_json_set: boolean;
+  gcs_endpoint?: string;
+
+  // Metadata
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StorageConfigInput {
+  backend_type: StorageBackendType;
+
+  // Local storage settings
+  local_base_path?: string;
+  local_serve_directly?: boolean;
+
+  // Azure Blob Storage settings
+  azure_account_name?: string;
+  azure_account_key?: string;
+  azure_container_name?: string;
+  azure_cdn_url?: string;
+
+  // S3 settings
+  s3_endpoint?: string;
+  s3_region?: string;
+  s3_bucket?: string;
+  s3_auth_method?: string;
+  s3_access_key_id?: string;
+  s3_secret_access_key?: string;
+  s3_role_arn?: string;
+  s3_role_session_name?: string;
+  s3_external_id?: string;
+  s3_web_identity_token_file?: string;
+
+  // GCS settings
+  gcs_bucket?: string;
+  gcs_project_id?: string;
+  gcs_auth_method?: string;
+  gcs_credentials_file?: string;
+  gcs_credentials_json?: string;
+  gcs_endpoint?: string;
+}
+
+export interface SetupStatus {
+  storage_configured: boolean;
+  setup_required: boolean;
+  storage_configured_at?: string;
+}

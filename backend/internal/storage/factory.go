@@ -20,7 +20,7 @@ func Register(name string, factory FactoryFunc) {
 func NewStorage(cfg *config.Config) (Storage, error) {
 	factory, ok := factories[cfg.Storage.DefaultBackend]
 	if !ok {
-		return nil, fmt.Errorf("unsupported storage backend: %s (must be 'local', 'azure', or 's3')", cfg.Storage.DefaultBackend)
+		return nil, fmt.Errorf("unsupported storage backend: %s (must be 'local', 'azure', 's3', or 'gcs')", cfg.Storage.DefaultBackend)
 	}
 
 	return factory(cfg)

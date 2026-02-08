@@ -18,6 +18,7 @@ import UploadPage from './pages/admin/UploadPage';
 import SCMProvidersPage from './pages/admin/SCMProvidersPage';
 import MirrorsPage from './pages/admin/MirrorsPage';
 import RolesPage from './pages/admin/RolesPage';
+import StoragePage from './pages/admin/StoragePage';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -52,6 +53,7 @@ function App() {
               <Route path="/admin/upload" element={<ProtectedRoute requiredScope="modules:write"><UploadPage /></ProtectedRoute>} />
               <Route path="/admin/scm-providers" element={<ProtectedRoute requiredScope="scm:read"><SCMProvidersPage /></ProtectedRoute>} />
               <Route path="/admin/mirrors" element={<ProtectedRoute requiredScope="mirrors:read"><MirrorsPage /></ProtectedRoute>} />
+              <Route path="/admin/storage" element={<ProtectedRoute requiredScope="admin"><StoragePage /></ProtectedRoute>} />
 
               {/* Catch all */}
               <Route path="*" element={<Navigate to="/" replace />} />
