@@ -437,6 +437,13 @@ class ApiClient {
     return response.data;
   }
 
+  async rotateAPIKey(id: string, gracePeriodHours: number = 0) {
+    const response = await this.client.post(`/api/v1/apikeys/${id}/rotate`, {
+      grace_period_hours: gracePeriodHours,
+    });
+    return response.data;
+  }
+
   // SCM Provider Management
   async listSCMProviders(organizationId?: string) {
     const params = organizationId ? { organization_id: organizationId } : {};

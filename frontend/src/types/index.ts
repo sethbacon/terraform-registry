@@ -78,6 +78,20 @@ export interface APIKey {
   created_at: string;
 }
 
+export interface RotateAPIKeyResponse {
+  new_key: {
+    id: string;
+    name: string;
+    key: string;
+    key_prefix: string;
+    scopes: string[];
+    expires_at?: string;
+    created_at: string;
+  };
+  old_key_status: string;
+  old_expires_at?: string;
+}
+
 export interface Module {
   id: string;
   namespace: string;

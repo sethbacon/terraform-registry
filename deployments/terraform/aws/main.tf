@@ -308,6 +308,134 @@ resource "aws_s3_bucket_public_access_block" "storage" {
 }
 
 # ---------------------------------------------------------------------------
+# Storage Configuration Locals
+# ---------------------------------------------------------------------------
+locals {
+  storage_env = concat(
+    [{ name = "TFR_STORAGE_DEFAULT_BACKEND", value = var.storage_backend }],
+
+    # S3 config (native default)
+    var.storage_backend == "s3" ? [
+      { name = "TFR_STORAGE_S3_BUCKET", value = aws_s3_bucket.storage.id },
+      { name = "TFR_STORAGE_S3_REGION", value = var.region },
+      { name = "TFR_STORAGE_S3_AUTH_METHOD", value = var.storage_s3_auth_method },
+    ] : [],
+    var.storage_backend == "s3" && var.storage_s3_endpoint != "" ? [
+      { name = "TFR_STORAGE_S3_ENDPOINT", value = var.storage_s3_endpoint },
+    ] : [],
+    var.storage_backend == "s3" && var.storage_s3_role_arn != "" ? [
+      { name = "TFR_STORAGE_S3_ROLE_ARN", value = var.storage_s3_role_arn },
+      { name = "TFR_STORAGE_S3_ROLE_SESSION_NAME", value = var.storage_s3_role_session_name },
+    ] : [],
+    var.storage_backend == "s3" && var.storage_s3_external_id != "" ? [
+      { name = "TFR_STORAGE_S3_EXTERNAL_ID", value = var.storage_s3_external_id },
+    ] : [],
+    var.storage_backend == "s3" && var.storage_s3_web_identity_token_file != "" ? [
+      { name = "TFR_STORAGE_S3_WEB_IDENTITY_TOKEN_FILE", value = var.storage_s3_web_identity_token_file },
+    ] : [],
+
+    # Azure config
+    var.storage_backend == "azure" ? [
+      { name = "TFR_STORAGE_AZURE_ACCOUNT_NAME", value = var.storage_azure_account_name },
+      { name = "TFR_STORAGE_AZURE_CONTAINER_NAME", value = var.storage_azure_container_name },
+    ] : [],
+    var.storage_backend == "azure" && var.storage_azure_cdn_url != "" ? [
+      { name = "TFR_STORAGE_AZURE_CDN_URL", value = var.storage_azure_cdn_url },
+    ] : [],
+
+    # GCS config
+    var.storage_backend == "gcs" ? [
+      { name = "TFR_STORAGE_GCS_BUCKET", value = var.storage_gcs_bucket },
+      { name = "TFR_STORAGE_GCS_PROJECT_ID", value = var.storage_gcs_project_id },
+      { name = "TFR_STORAGE_GCS_AUTH_METHOD", value = var.storage_gcs_auth_method },
+    ] : [],
+
+    # Local config
+    var.storage_backend == "local" ? [
+      { name = "TFR_STORAGE_LOCAL_BASE_PATH", value = var.storage_local_base_path },
+      { name = "TFR_STORAGE_LOCAL_SERVE_DIRECTLY", value = "true" },
+    ] : [],
+  )
+
+  storage_secrets = concat(
+    var.storage_backend == "s3" && var.storage_s3_auth_method == "static" ? [
+      { name = "TFR_STORAGE_S3_ACCESS_KEY_ID", valueFrom = aws_secretsmanager_secret.s3_access_key[0].arn },
+      { name = "TFR_STORAGE_S3_SECRET_ACCESS_KEY", valueFrom = aws_secretsmanager_secret.s3_secret_key[0].arn },
+    ] : [],
+    var.storage_backend == "azure" ? [
+      { name = "TFR_STORAGE_AZURE_ACCOUNT_KEY", valueFrom = aws_secretsmanager_secret.azure_account_key[0].arn },
+    ] : [],
+    var.storage_backend == "gcs" && var.storage_gcs_credentials_json != "" ? [
+      { name = "TFR_STORAGE_GCS_CREDENTIALS_JSON", valueFrom = aws_secretsmanager_secret.gcs_credentials[0].arn },
+    ] : [],
+  )
+
+  storage_secret_arns = concat(
+    var.storage_backend == "s3" && var.storage_s3_auth_method == "static" ? [
+      aws_secretsmanager_secret.s3_access_key[0].arn,
+      aws_secretsmanager_secret.s3_secret_key[0].arn,
+    ] : [],
+    var.storage_backend == "azure" ? [
+      aws_secretsmanager_secret.azure_account_key[0].arn,
+    ] : [],
+    var.storage_backend == "gcs" && var.storage_gcs_credentials_json != "" ? [
+      aws_secretsmanager_secret.gcs_credentials[0].arn,
+    ] : [],
+  )
+}
+
+# ---------------------------------------------------------------------------
+# Conditional Storage Secrets
+# ---------------------------------------------------------------------------
+resource "aws_secretsmanager_secret" "s3_access_key" {
+  count                   = var.storage_backend == "s3" && var.storage_s3_auth_method == "static" ? 1 : 0
+  name                    = "${var.name}/s3-access-key"
+  recovery_window_in_days = 7
+}
+
+resource "aws_secretsmanager_secret_version" "s3_access_key" {
+  count         = var.storage_backend == "s3" && var.storage_s3_auth_method == "static" ? 1 : 0
+  secret_id     = aws_secretsmanager_secret.s3_access_key[0].id
+  secret_string = var.storage_s3_access_key_id
+}
+
+resource "aws_secretsmanager_secret" "s3_secret_key" {
+  count                   = var.storage_backend == "s3" && var.storage_s3_auth_method == "static" ? 1 : 0
+  name                    = "${var.name}/s3-secret-key"
+  recovery_window_in_days = 7
+}
+
+resource "aws_secretsmanager_secret_version" "s3_secret_key" {
+  count         = var.storage_backend == "s3" && var.storage_s3_auth_method == "static" ? 1 : 0
+  secret_id     = aws_secretsmanager_secret.s3_secret_key[0].id
+  secret_string = var.storage_s3_secret_access_key
+}
+
+resource "aws_secretsmanager_secret" "azure_account_key" {
+  count                   = var.storage_backend == "azure" ? 1 : 0
+  name                    = "${var.name}/azure-account-key"
+  recovery_window_in_days = 7
+}
+
+resource "aws_secretsmanager_secret_version" "azure_account_key" {
+  count         = var.storage_backend == "azure" ? 1 : 0
+  secret_id     = aws_secretsmanager_secret.azure_account_key[0].id
+  secret_string = var.storage_azure_account_key
+}
+
+resource "aws_secretsmanager_secret" "gcs_credentials" {
+  count                   = var.storage_backend == "gcs" && var.storage_gcs_credentials_json != "" ? 1 : 0
+  name                    = "${var.name}/gcs-credentials"
+  recovery_window_in_days = 7
+}
+
+resource "aws_secretsmanager_secret_version" "gcs_credentials" {
+  count         = var.storage_backend == "gcs" && var.storage_gcs_credentials_json != "" ? 1 : 0
+  secret_id     = aws_secretsmanager_secret.gcs_credentials[0].id
+  secret_string = var.storage_gcs_credentials_json
+}
+
+# ---------------------------------------------------------------------------
 # CloudWatch Log Groups
 # ---------------------------------------------------------------------------
 resource "aws_cloudwatch_log_group" "backend" {
@@ -329,8 +457,8 @@ resource "aws_iam_role" "execution" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
       Principal = { Service = "ecs-tasks.amazonaws.com" }
     }]
   })
@@ -350,11 +478,14 @@ resource "aws_iam_role_policy" "execution_secrets" {
     Statement = [{
       Effect = "Allow"
       Action = ["secretsmanager:GetSecretValue"]
-      Resource = [
-        aws_secretsmanager_secret.db_password.arn,
-        aws_secretsmanager_secret.jwt_secret.arn,
-        aws_secretsmanager_secret.encryption_key.arn,
-      ]
+      Resource = concat(
+        [
+          aws_secretsmanager_secret.db_password.arn,
+          aws_secretsmanager_secret.jwt_secret.arn,
+          aws_secretsmanager_secret.encryption_key.arn,
+        ],
+        local.storage_secret_arns,
+      )
     }]
   })
 }
@@ -365,8 +496,8 @@ resource "aws_iam_role" "task" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
       Principal = { Service = "ecs-tasks.amazonaws.com" }
     }]
   })
@@ -482,7 +613,7 @@ resource "aws_ecs_task_definition" "backend" {
       { containerPort = 9090 },
     ]
 
-    environment = [
+    environment = concat([
       { name = "TFR_SERVER_HOST", value = "0.0.0.0" },
       { name = "TFR_SERVER_PORT", value = "8080" },
       { name = "TFR_SERVER_BASE_URL", value = var.domain != "" ? "https://${var.domain}" : "http://${aws_lb.main.dns_name}" },
@@ -492,9 +623,6 @@ resource "aws_ecs_task_definition" "backend" {
       { name = "TFR_DATABASE_USER", value = "registry" },
       { name = "TFR_DATABASE_SSL_MODE", value = "require" },
       { name = "TFR_SECURITY_TLS_ENABLED", value = "false" },
-      { name = "TFR_STORAGE_DEFAULT_BACKEND", value = "s3" },
-      { name = "TFR_STORAGE_S3_BUCKET", value = aws_s3_bucket.storage.id },
-      { name = "TFR_STORAGE_S3_REGION", value = var.region },
       { name = "TFR_AUTH_API_KEYS_ENABLED", value = "true" },
       { name = "TFR_LOGGING_LEVEL", value = "info" },
       { name = "TFR_LOGGING_FORMAT", value = "json" },
@@ -502,13 +630,13 @@ resource "aws_ecs_task_definition" "backend" {
       { name = "TFR_TELEMETRY_METRICS_ENABLED", value = "true" },
       { name = "TFR_TELEMETRY_METRICS_PROMETHEUS_PORT", value = "9090" },
       { name = "DEV_MODE", value = "false" },
-    ]
+    ], local.storage_env)
 
-    secrets = [
+    secrets = concat([
       { name = "TFR_DATABASE_PASSWORD", valueFrom = aws_secretsmanager_secret.db_password.arn },
       { name = "TFR_JWT_SECRET", valueFrom = aws_secretsmanager_secret.jwt_secret.arn },
       { name = "ENCRYPTION_KEY", valueFrom = aws_secretsmanager_secret.encryption_key.arn },
-    ]
+    ], local.storage_secrets)
 
     healthCheck = {
       command     = ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1"]

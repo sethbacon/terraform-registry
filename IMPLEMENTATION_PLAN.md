@@ -982,24 +982,64 @@ GET/POST/DELETE /api/v1/api-keys
     - Config/secret checksum annotations for automatic rollout on changes
     - NOTES.txt with post-install verification steps and warnings
   - Verified: `helm lint` passes, `helm template` renders valid manifests, `kustomize build` passes for base and all overlays, frontend Docker image builds successfully
-- **Session 21**: Phase 6 - Deployment Configurations - Azure Container Apps, binary deployment, AWS ECS
+- **Session 21** ✅: Phase 6 - Deployment Configurations - Cloud PaaS, Binary, Terraform
+  - Created `deployments/azure-container-apps/` - Azure Container Apps deployment:
+    - `main.bicep` - Bicep template: Container Apps Environment, backend (internal ingress, 8080, secrets, probes, 1-10 replicas), frontend (external ingress, 80, 1-5 replicas), Log Analytics
+    - `parameters.json` - Parameter values template for Bicep deployment
+    - `deploy.sh` - CLI deployment script using `az containerapp` commands
+  - Created `deployments/aws-ecs/` - AWS ECS Fargate deployment:
+    - `task-definition-backend.json` - Fargate task: 512 CPU/1024 MiB, ports 8080+9090, Secrets Manager refs, awslogs
+    - `task-definition-frontend.json` - Fargate task: 256 CPU/512 MiB, port 80, awslogs
+    - `cloudformation.yaml` - Full CloudFormation stack: VPC (public/private subnets, NAT), ECS cluster, backend/frontend services, ALB with HTTPS, RDS PostgreSQL, S3 bucket, ECR repos, Secrets Manager, IAM roles, CloudWatch logs, security groups
+    - `deploy.sh` - CLI deployment script using `aws` commands with ECR push
+  - Created `deployments/google-cloud-run/` - Google Cloud Run deployment:
+    - `backend-service.yaml` - Knative service: port 8080, Cloud SQL socket, Secret Manager refs, VPC connector, 1-10 instances, health probes
+    - `frontend-service.yaml` - Knative service: port 80, public ingress, 1-5 instances
+    - `deploy.sh` - CLI deployment script using `gcloud run deploy`, Artifact Registry, service account setup
+  - Created `deployments/binary/` - Standalone binary deployment:
+    - `terraform-registry.service` - Systemd unit: registry user, EnvironmentFile, restart on failure, security hardening (ProtectSystem, NoNewPrivileges, PrivateTmp)
+    - `environment` - Environment file template with all `TFR_*` variables and descriptions
+    - `nginx-registry.conf` - Nginx site config: SPA serving, reverse proxy to backend:8080, Let's Encrypt TLS, HSTS, security headers, gzip, static asset caching
+    - `install.sh` - Installation script: creates user/dirs, copies binary+frontend, installs systemd service, nginx config
+  - Created `deployments/terraform/aws/` - Terraform config for AWS:
+    - `main.tf` - VPC, ECS Fargate cluster+services, ALB with HTTPS, Aurora PostgreSQL, S3 bucket, ECR repos, Secrets Manager, IAM roles, CloudWatch logs
+    - `variables.tf` - Region, domain, instance class, image tag, replica counts, secrets
+    - `outputs.tf` - ALB URL, ECR URIs, RDS endpoint, S3 bucket, VPC ID
+  - Created `deployments/terraform/azure/` - Terraform config for Azure:
+    - `main.tf` - Resource group, Container Apps Environment+apps, PostgreSQL Flexible Server, Storage Account, Key Vault, ACR, Log Analytics
+    - `variables.tf` - Location, resource group, DB SKU, image tag, replica counts, secrets
+    - `outputs.tf` - Frontend URL, backend FQDN, PostgreSQL host, ACR login server, Key Vault URI
+  - Created `deployments/terraform/gcp/` - Terraform config for GCP:
+    - `main.tf` - Cloud Run v2 services, Cloud SQL PostgreSQL, GCS bucket, Secret Manager, Artifact Registry, VPC+connector, service account with IAM bindings
+    - `variables.tf` - Project ID, region, domain, DB tier, image tag, instance counts, secrets
+    - `outputs.tf` - Frontend/backend URLs, Cloud SQL connection, GCS bucket, Artifact Registry URL
 - **Session 22**: Phase 6 - SCM addition - Add Bitbucket Datacenter as an SCM for modules, fixup backend and frontend support
 - **Session 23**: Phase 6 - Add terraform configuration for storage configuration options to deployments
-- **Session 24**: Phase 6 - API key frontend configuration interface for managing key expiration and key rotation
+- **Session 24** ✅: Phase 6 - API key frontend: expiration, rotation & edit
+  - Enhanced `frontend/src/pages/admin/APIKeysPage.tsx` with full API key lifecycle management:
+    - **Create dialog**: Added optional expiration date field (`<TextField type="datetime-local">`)
+    - **Table columns**: Added Scopes column (chips with overflow tooltip) and Expires column
+    - **Expiration indicators**: Red "Expired" chip (row dimmed), orange "Expires soon" (within 7 days), formatted date for active, "Never" for no expiration
+    - **Edit dialog**: Update name, scopes (checkboxes), and expiration date for existing keys; calls `PUT /api/v1/apikeys/:id`
+    - **Rotate dialog**: Immediate revocation or grace period (1-72h slider); shows new key value with copy-to-clipboard; calls `POST /api/v1/apikeys/:id/rotate`
+    - Helper functions: `getExpirationStatus()`, `toDatetimeLocalValue()`, reusable `renderScopeCheckboxes()`
+  - Added `rotateAPIKey()` method to `frontend/src/services/api.ts`
+  - Added `RotateAPIKeyResponse` interface to `frontend/src/types/index.ts`
+  - Frontend builds successfully with no compile errors
 - **Session 25**: Phase 7 - Documentation & Testing - Unit and integration tests, evaluate database migrations for consolidation/refactoring
 - **Session 26**: Phase 7 - Documentation & Testing - E2E tests and security scanning
-- **Session 27**: Phase 7 - Documentation & Testing - Comprehensive docs (features, security, configuration, deployment, apis, troubleshooting, contributing, testing)
-- **Session 28**: Phase 8 - Production Polish - Security hardening, audit logging, scan codebase for opensource license attribution violations (are we using any opensource code that we should be correctly attributing based on the code's license and re-use constraints?), license evaluation, based on the type of application we are releasing, is MIT license the best choice? should it be MPL or another opensource license?
+- **Session 27**: Phase 7 - Documentation & Testing - Comprehensive docs (features, security, configuration, deployment, apis, troubleshooting, contributing, testing), helper text on all frontend input boxes, documentation links on all frontend pages to open context sensitive help (maybe a support icon on the top bar that tracks page context). 
+- **Session 28**: Phase 8 - Production Polish - Security hardening, audit logging, API key expiration email alerts (background job to detect keys expiring within configurable threshold, SMTP/email integration, notification preferences), scan codebase for opensource license attribution violations (are we using any opensource code that we should be correctly attributing based on the code's license and re-use constraints?), license evaluation, based on the type of application we are releasing, is MIT license the best choice? should it be MPL or another opensource license?
 - **Session 29**: Phase 8 - Production Polish - Monitoring, observability, performance, optimization
 - **Session 30**: Phase 8 - Production Polish - Final testing, deployment checklist, github actions for dependabot bi-weekly builds
 - **Session 31**: Phase 8 - Production Polish - Evaluate whether a visual studio marketplace azure devops extension would be useful (formerly Phase 5B)
 
 ---
 
-**Last Updated**: Session 20 - 2026-02-08
-**Status**: ✅ Session 20 COMPLETE - Deployment configurations (Docker Compose, Kubernetes/Kustomize, Helm)
-**Next Session**: Session 21 - Deployment Configurations (Azure Container Apps, binary deployment, AWS ECS)
-**Priority**: Phase 6 (Deployment) - Additional deployment targets
+**Last Updated**: Session 24 - 2026-02-08
+**Status**: ✅ Session 24 COMPLETE - API key frontend: expiration, rotation & edit
+**Next Session**: Session 23 - Storage configuration in deployment configs (working backwards)
+**Priority**: Phase 6 (Deployment) - Storage configuration in IaC
 **Deferred**: Phase 5B (Azure DevOps Extension) - Will implement based on future demand
 
 **Note**: After Session 19, to activate the storage configuration UI:
