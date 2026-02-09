@@ -5,8 +5,8 @@
 -- ============================================================================
 -- 1. Ensure the default organization exists
 -- ============================================================================
-INSERT INTO organizations (name, description, is_public, created_at, updated_at)
-VALUES ('default', 'Default organization for system administration', false, NOW(), NOW())
+INSERT INTO organizations (name, display_name, created_at, updated_at)
+VALUES ('default', 'Default organization for system administration', NOW(), NOW())
 ON CONFLICT (name) DO NOTHING;
 
 -- ============================================================================

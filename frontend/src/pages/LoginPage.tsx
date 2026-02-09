@@ -12,6 +12,7 @@ import {
 import { Login as LoginIcon } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { apiClient } from '../services/api';
 
 const LoginPage: React.FC = () => {
   const { login } = useAuth();
@@ -19,20 +20,19 @@ const LoginPage: React.FC = () => {
   const isDev = import.meta.env.DEV;
 
   const handleDevLogin = async () => {
-    // SECURITY: Store the development API key - user data will be fetched from API
-    // This ensures scopes and permissions always come from the server
-    localStorage.setItem('auth_token', 'dev_qHlTX4JvjK1yVUgRukLlgiwFQmFOiHdEhHYVJNfhNXc');
+    // Call the dev login endpoint to get a JWT (no hardcoded keys)
+    // This endpoint is gated by DevModeMiddleware and returns 403 in production
+    const response = await apiClient.devLogin();
+    localStorage.setItem('auth_token', response.token);
 
     // Clear any cached user data to force fresh fetch from API
     localStorage.removeItem('user');
     localStorage.removeItem('role_template');
     localStorage.removeItem('allowed_scopes');
 
-    console.log('Dev login: setting API key, will fetch user from API');
-    // Pass a placeholder - login() will fetch actual user data from API
+    // login() will call fetchCurrentUser() which validates the JWT via /auth/me
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await login({} as any);
-    console.log('Dev login: user data fetched, navigating to home');
     navigate('/');
   };
 

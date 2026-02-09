@@ -28,17 +28,11 @@ func NewDevHandlers(cfg *config.Config, db *sql.DB) *DevHandlers {
 	}
 }
 
-// IsDevMode checks if the application is running in development mode
+// IsDevMode checks if the application is running in development mode.
+// Requires explicit opt-in via DEV_MODE=true or DEV_MODE=1 environment variable.
 func IsDevMode() bool {
-	// Check for DEV_MODE or NODE_ENV=development environment variables
 	devMode := os.Getenv("DEV_MODE")
-	nodeEnv := os.Getenv("NODE_ENV")
-	ginMode := os.Getenv("GIN_MODE")
-
-	return devMode == "true" || devMode == "1" ||
-		nodeEnv == "development" ||
-		ginMode == "debug" ||
-		ginMode == ""
+	return devMode == "true" || devMode == "1"
 }
 
 // DevModeMiddleware blocks access to dev endpoints in production
@@ -184,6 +178,43 @@ func (h *DevHandlers) ListUsersForImpersonationHandler() gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{
 			"users":    result,
 			"dev_mode": true,
+		})
+	}
+}
+
+// DevLoginHandler authenticates as the dev admin user and returns a JWT.
+// This eliminates the need for a hardcoded API key in the frontend.
+// POST /api/v1/dev/login
+// Protected by DevModeMiddleware - returns 403 in production.
+func (h *DevHandlers) DevLoginHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, err := h.userRepo.GetUserByEmail(c.Request.Context(), "admin@dev.local")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to look up dev admin user",
+			})
+			return
+		}
+
+		if user == nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Dev admin user (admin@dev.local) not found. Run the seed script: psql -f backend/scripts/create-dev-admin-user.sql",
+			})
+			return
+		}
+
+		token, err := auth.GenerateJWT(user.ID, user.Email, 24*time.Hour)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to generate token",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"token":      token,
+			"user":       user,
+			"expires_in": 86400,
 		})
 	}
 }

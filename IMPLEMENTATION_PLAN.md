@@ -959,22 +959,44 @@ GET/POST/DELETE /api/v1/api-keys
   - Added Storage menu item to admin navigation (admin scope required)
   - Updated types/index.ts with StorageConfigResponse, StorageConfigInput, SetupStatus types
   - Updated api.ts with storage configuration API methods
-- **Session 20**: Phase 6 - Deployment Configurations - Docker Compose, Kubernetes, Helm
+- **Session 20** ✅: Phase 6 - Deployment Configurations - Docker Compose, Kubernetes, Helm
+  - Created `frontend/Dockerfile` - Multi-stage build (node:20-alpine -> nginx:1.25-alpine)
+  - Created `frontend/nginx.conf` - SPA serving + reverse proxy for API/protocol paths to backend
+  - Created `backend/.dockerignore` and `frontend/.dockerignore` for lean build contexts
+  - Fixed `frontend/vite.config.ts` - Conditional cert loading (skipped during Docker build)
+  - Updated `deployments/docker-compose.yml` - Added frontend service, parameterized passwords, restart policy
+  - Created `deployments/docker-compose.prod.yml` - Production override (no TLS, env_file, resource limits, pre-built images)
+  - Created `deployments/.env.production.example` - Template for all production secrets
+  - Created `deployments/kubernetes/base/` - 12 Kustomize base manifests:
+    - namespace, serviceaccount, configmap, frontend-nginx-configmap, secret, PVC
+    - backend deployment (2 replicas, probes, Prometheus annotations, PVC mount)
+    - frontend deployment (2 replicas, nginx ConfigMap mount)
+    - backend service (ClusterIP, 8080+9090), frontend service (ClusterIP, 80)
+    - ingress (nginx class, TLS termination), PDB (minAvailable: 1)
+  - Created `deployments/kubernetes/overlays/dev/` - 1 replica, debug logging, DEV_MODE true
+  - Created `deployments/kubernetes/overlays/production/` - 3 backend replicas, HPA (3-10), warn logging, 50Gi PVC
+  - Created `deployments/helm/` - Full Helm chart (Chart.yaml, values.yaml, 12 templates):
+    - Configurable: all storage backends, external DB, OIDC/Azure AD auth, ingress, HPA, PDB
+    - Dynamic nginx ConfigMap with templated backend service name
+    - Support for existing secrets, conditional PVC, frontend enable/disable
+    - Config/secret checksum annotations for automatic rollout on changes
+    - NOTES.txt with post-install verification steps and warnings
+  - Verified: `helm lint` passes, `helm template` renders valid manifests, `kustomize build` passes for base and all overlays, frontend Docker image builds successfully
 - **Session 21**: Phase 6 - Deployment Configurations - Azure Container Apps, binary deployment, AWS ECS
 - **Session 22**: Phase 6 - SCM addition - Add Bitbucket Datacenter as an SCM for modules, fixup backend and frontend support
-- **Session 23**: Phase 7 - Documentation & Testing - Comprehensive docs
-- **Session 24**: Phase 7 - Documentation & Testing - Unit and integration tests
-- **Session 25**: Phase 7 - Documentation & Testing - E2E tests and security scanning
-- **Session 26**: Phase 8 - Production Polish - Monitoring, observability, performance, optimization
-- **Session 27**: Phase 8 - Production Polish - Security hardening, audit logging, scan codebase for opensource license attribution violations
-- **Session 28**: Phase 8 - Production Polish - Final testing, deployment checklist
+- **Session 23**: Phase 7 - Documentation & Testing - Unit and integration tests
+- **Session 24**: Phase 7 - Documentation & Testing - E2E tests and security scanning
+- **Session 25**: Phase 7 - Documentation & Testing - Comprehensive docs (features, security, configuration, deployment, apis, troubleshooting, contributing, testing)
+- **Session 26**: Phase 8 - Production Polish - Security hardening, audit logging, scan codebase for opensource license attribution violations
+- **Session 27**: Phase 8 - Production Polish - Monitoring, observability, performance, optimization
+- **Session 28**: Phase 8 - Production Polish - Final testing, deployment checklist, github actions for dependabot bi-weekly builds
 
 ---
 
-**Last Updated**: Session 19 - 2026-02-08
-**Status**: ✅ Session 19 COMPLETE - Storage frontend configuration UI implemented
-**Next Session**: Session 20 - Deployment Configurations (Docker Compose, Kubernetes, Helm)
-**Priority**: Phase 6 (Deployment) - Create deployment configurations for various environments
+**Last Updated**: Session 20 - 2026-02-08
+**Status**: ✅ Session 20 COMPLETE - Deployment configurations (Docker Compose, Kubernetes/Kustomize, Helm)
+**Next Session**: Session 21 - Deployment Configurations (Azure Container Apps, binary deployment, AWS ECS)
+**Priority**: Phase 6 (Deployment) - Additional deployment targets
 **Deferred**: Phase 5B (Azure DevOps Extension) - Will implement based on future demand
 
 **Note**: After Session 19, to activate the storage configuration UI:

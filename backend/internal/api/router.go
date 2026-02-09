@@ -388,8 +388,9 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 		devGroup.Use(admin.DevModeMiddleware())
 		{
 			devHandlers := admin.NewDevHandlers(cfg, db)
-			// Status endpoint (no auth required, but must be in dev mode)
+			// Unauthenticated dev endpoints (dev-mode-gated only)
 			devGroup.GET("/status", devHandlers.DevStatusHandler())
+			devGroup.POST("/login", devHandlers.DevLoginHandler())
 
 			// Impersonation endpoints (require auth + admin scope)
 			devGroup.Use(middleware.AuthMiddleware(cfg, userRepo, apiKeyRepo, orgRepo))

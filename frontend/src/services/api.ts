@@ -759,6 +759,11 @@ class ApiClient {
     return response.data;
   }
 
+  async devLogin(): Promise<{ token: string; user: any; expires_in: number }> {
+    const response = await this.client.post('/api/v1/dev/login');
+    return response.data;
+  }
+
   async listUsersForImpersonation(): Promise<{
     users: Array<{
       id: string;
