@@ -213,6 +213,145 @@ resource "google_secret_manager_secret_version" "encryption_key" {
 }
 
 # ---------------------------------------------------------------------------
+# Storage Configuration Locals
+# ---------------------------------------------------------------------------
+locals {
+  storage_env = concat(
+    [{ name = "TFR_STORAGE_DEFAULT_BACKEND", value = var.storage_backend }],
+
+    # GCS config (native default)
+    var.storage_backend == "gcs" ? [
+      { name = "TFR_STORAGE_GCS_BUCKET", value = google_storage_bucket.storage.name },
+      { name = "TFR_STORAGE_GCS_PROJECT_ID", value = var.project_id },
+      { name = "TFR_STORAGE_GCS_AUTH_METHOD", value = var.storage_gcs_auth_method },
+    ] : [],
+    var.storage_backend == "gcs" && var.storage_gcs_endpoint != "" ? [
+      { name = "TFR_STORAGE_GCS_ENDPOINT", value = var.storage_gcs_endpoint },
+    ] : [],
+
+    # S3 config
+    var.storage_backend == "s3" ? [
+      { name = "TFR_STORAGE_S3_BUCKET", value = var.storage_s3_bucket },
+      { name = "TFR_STORAGE_S3_REGION", value = var.storage_s3_region },
+      { name = "TFR_STORAGE_S3_AUTH_METHOD", value = var.storage_s3_auth_method },
+    ] : [],
+    var.storage_backend == "s3" && var.storage_s3_endpoint != "" ? [
+      { name = "TFR_STORAGE_S3_ENDPOINT", value = var.storage_s3_endpoint },
+    ] : [],
+    var.storage_backend == "s3" && var.storage_s3_role_arn != "" ? [
+      { name = "TFR_STORAGE_S3_ROLE_ARN", value = var.storage_s3_role_arn },
+      { name = "TFR_STORAGE_S3_ROLE_SESSION_NAME", value = var.storage_s3_role_session_name },
+    ] : [],
+    var.storage_backend == "s3" && var.storage_s3_external_id != "" ? [
+      { name = "TFR_STORAGE_S3_EXTERNAL_ID", value = var.storage_s3_external_id },
+    ] : [],
+    var.storage_backend == "s3" && var.storage_s3_web_identity_token_file != "" ? [
+      { name = "TFR_STORAGE_S3_WEB_IDENTITY_TOKEN_FILE", value = var.storage_s3_web_identity_token_file },
+    ] : [],
+
+    # Azure config
+    var.storage_backend == "azure" ? [
+      { name = "TFR_STORAGE_AZURE_ACCOUNT_NAME", value = var.storage_azure_account_name },
+      { name = "TFR_STORAGE_AZURE_CONTAINER_NAME", value = var.storage_azure_container_name },
+    ] : [],
+    var.storage_backend == "azure" && var.storage_azure_cdn_url != "" ? [
+      { name = "TFR_STORAGE_AZURE_CDN_URL", value = var.storage_azure_cdn_url },
+    ] : [],
+
+    # Local config
+    var.storage_backend == "local" ? [
+      { name = "TFR_STORAGE_LOCAL_BASE_PATH", value = var.storage_local_base_path },
+      { name = "TFR_STORAGE_LOCAL_SERVE_DIRECTLY", value = "true" },
+    ] : [],
+  )
+
+  # Secret Manager secrets for storage credentials (secret_id -> secret reference)
+  storage_secret_env = concat(
+    var.storage_backend == "gcs" && var.storage_gcs_credentials_json != "" ? [
+      { name = "TFR_STORAGE_GCS_CREDENTIALS_JSON", secret_id = google_secret_manager_secret.gcs_credentials[0].secret_id },
+    ] : [],
+    var.storage_backend == "s3" && var.storage_s3_auth_method == "static" ? [
+      { name = "TFR_STORAGE_S3_ACCESS_KEY_ID", secret_id = google_secret_manager_secret.s3_access_key[0].secret_id },
+      { name = "TFR_STORAGE_S3_SECRET_ACCESS_KEY", secret_id = google_secret_manager_secret.s3_secret_key[0].secret_id },
+    ] : [],
+    var.storage_backend == "azure" ? [
+      { name = "TFR_STORAGE_AZURE_ACCOUNT_KEY", secret_id = google_secret_manager_secret.azure_account_key[0].secret_id },
+    ] : [],
+  )
+}
+
+# ---------------------------------------------------------------------------
+# Conditional Storage Secrets
+# ---------------------------------------------------------------------------
+resource "google_secret_manager_secret" "gcs_credentials" {
+  count     = var.storage_backend == "gcs" && var.storage_gcs_credentials_json != "" ? 1 : 0
+  secret_id = "${var.name}-gcs-credentials"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret_version" "gcs_credentials" {
+  count       = var.storage_backend == "gcs" && var.storage_gcs_credentials_json != "" ? 1 : 0
+  secret      = google_secret_manager_secret.gcs_credentials[0].id
+  secret_data = var.storage_gcs_credentials_json
+}
+
+resource "google_secret_manager_secret" "s3_access_key" {
+  count     = var.storage_backend == "s3" && var.storage_s3_auth_method == "static" ? 1 : 0
+  secret_id = "${var.name}-s3-access-key"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret_version" "s3_access_key" {
+  count       = var.storage_backend == "s3" && var.storage_s3_auth_method == "static" ? 1 : 0
+  secret      = google_secret_manager_secret.s3_access_key[0].id
+  secret_data = var.storage_s3_access_key_id
+}
+
+resource "google_secret_manager_secret" "s3_secret_key" {
+  count     = var.storage_backend == "s3" && var.storage_s3_auth_method == "static" ? 1 : 0
+  secret_id = "${var.name}-s3-secret-key"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret_version" "s3_secret_key" {
+  count       = var.storage_backend == "s3" && var.storage_s3_auth_method == "static" ? 1 : 0
+  secret      = google_secret_manager_secret.s3_secret_key[0].id
+  secret_data = var.storage_s3_secret_access_key
+}
+
+resource "google_secret_manager_secret" "azure_account_key" {
+  count     = var.storage_backend == "azure" ? 1 : 0
+  secret_id = "${var.name}-azure-account-key"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret_version" "azure_account_key" {
+  count       = var.storage_backend == "azure" ? 1 : 0
+  secret      = google_secret_manager_secret.azure_account_key[0].id
+  secret_data = var.storage_azure_account_key
+}
+
+# ---------------------------------------------------------------------------
 # Service Account
 # ---------------------------------------------------------------------------
 resource "google_service_account" "backend" {
@@ -317,20 +456,31 @@ resource "google_cloud_run_v2_service" "backend" {
         value = "false"
       }
       env {
-        name  = "TFR_STORAGE_DEFAULT_BACKEND"
-        value = "gcs"
-      }
-      env {
-        name  = "TFR_STORAGE_GCS_BUCKET"
-        value = google_storage_bucket.storage.name
-      }
-      env {
-        name  = "TFR_STORAGE_GCS_PROJECT_ID"
-        value = var.project_id
-      }
-      env {
         name  = "TFR_AUTH_API_KEYS_ENABLED"
         value = "true"
+      }
+
+      # Storage configuration (value-based env vars)
+      dynamic "env" {
+        for_each = local.storage_env
+        content {
+          name  = env.value.name
+          value = env.value.value
+        }
+      }
+
+      # Storage configuration (secret-referenced env vars)
+      dynamic "env" {
+        for_each = local.storage_secret_env
+        content {
+          name = env.value.name
+          value_source {
+            secret_key_ref {
+              secret  = env.value.secret_id
+              version = "latest"
+            }
+          }
+        }
       }
       env {
         name  = "TFR_LOGGING_LEVEL"

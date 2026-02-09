@@ -270,6 +270,14 @@ resource "azurerm_container_app" "backend" {
     value = azurerm_container_registry.main.admin_password
   }
 
+  dynamic "secret" {
+    for_each = local.storage_secrets
+    content {
+      name  = secret.value.name
+      value = secret.value.value
+    }
+  }
+
   registry {
     server               = azurerm_container_registry.main.login_server
     username             = azurerm_container_registry.main.admin_username
@@ -346,18 +354,6 @@ resource "azurerm_container_app" "backend" {
         value = "false"
       }
       env {
-        name  = "TFR_STORAGE_DEFAULT_BACKEND"
-        value = "azure"
-      }
-      env {
-        name  = "TFR_STORAGE_AZURE_ACCOUNT_NAME"
-        value = azurerm_storage_account.main.name
-      }
-      env {
-        name  = "TFR_STORAGE_AZURE_CONTAINER_NAME"
-        value = azurerm_storage_container.registry.name
-      }
-      env {
         name  = "TFR_AUTH_API_KEYS_ENABLED"
         value = "true"
       }
@@ -372,6 +368,24 @@ resource "azurerm_container_app" "backend" {
       env {
         name  = "DEV_MODE"
         value = "false"
+      }
+
+      # Storage configuration (value-based env vars)
+      dynamic "env" {
+        for_each = local.storage_env
+        content {
+          name  = env.value.name
+          value = env.value.value
+        }
+      }
+
+      # Storage configuration (secret-referenced env vars)
+      dynamic "env" {
+        for_each = local.storage_secret_env
+        content {
+          name        = env.value.name
+          secret_name = env.value.secret_name
+        }
       }
 
       liveness_probe {

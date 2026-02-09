@@ -114,6 +114,10 @@ func (s *ConnectorSettings) Validate() error {
 	if !s.Kind.IsValid() {
 		return ErrUnknownProviderKind
 	}
+	// PAT-based providers don't require OAuth credentials
+	if s.Kind.IsPATBased() {
+		return nil
+	}
 	if s.ClientID == "" {
 		return ErrClientIDRequired
 	}

@@ -13,16 +13,22 @@ const (
 	ProviderGitHub      ProviderType = "github"
 	ProviderAzureDevOps ProviderType = "azuredevops"
 	ProviderGitLab      ProviderType = "gitlab"
+	ProviderBitbucketDC ProviderType = "bitbucket_dc"
 )
 
 // Valid returns true if the provider type is valid
 func (p ProviderType) Valid() bool {
 	switch p {
-	case ProviderGitHub, ProviderAzureDevOps, ProviderGitLab:
+	case ProviderGitHub, ProviderAzureDevOps, ProviderGitLab, ProviderBitbucketDC:
 		return true
 	default:
 		return false
 	}
+}
+
+// IsPATBased returns true if the provider uses Personal Access Tokens instead of OAuth
+func (p ProviderType) IsPATBased() bool {
+	return p == ProviderBitbucketDC
 }
 
 // IsValid is an alias for Valid()
@@ -270,11 +276,12 @@ type ModuleSourceRepoRecord = ModuleSCMRepo
 type SCMWebhookLogRecord = SCMWebhookEvent
 type TagImmutabilityAlertRecord = VersionImmutabilityViolation
 
-// KindGitHub, KindAzureDevOps, KindGitLab are aliases for consistency
+// KindGitHub, KindAzureDevOps, KindGitLab, KindBitbucketDC are aliases for consistency
 const (
 	KindGitHub      = ProviderGitHub
 	KindAzureDevOps = ProviderAzureDevOps
 	KindGitLab      = ProviderGitLab
+	KindBitbucketDC = ProviderBitbucketDC
 )
 
 // Note: ArchiveKind type and constants (ArchiveTarball, ArchiveZipball) are defined in connector.go

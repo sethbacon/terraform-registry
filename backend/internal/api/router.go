@@ -26,6 +26,12 @@ import (
 
 	// Import storage backends to register them
 	_ "github.com/terraform-registry/terraform-registry/internal/storage/local"
+
+	// Import SCM connectors to register them via init()
+	_ "github.com/terraform-registry/terraform-registry/internal/scm/azuredevops"
+	_ "github.com/terraform-registry/terraform-registry/internal/scm/bitbucket"
+	_ "github.com/terraform-registry/terraform-registry/internal/scm/github"
+	_ "github.com/terraform-registry/terraform-registry/internal/scm/gitlab"
 )
 
 // NewRouter creates and configures the Gin router
@@ -304,6 +310,9 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 				scmProvidersGroup.GET("/:id/oauth/authorize", middleware.RequireScope(auth.ScopeSCMManage), scmOAuthHandlers.InitiateOAuth)
 				scmProvidersGroup.DELETE("/:id/oauth/token", middleware.RequireScope(auth.ScopeSCMManage), scmOAuthHandlers.RevokeOAuth)
 				scmProvidersGroup.POST("/:id/oauth/refresh", middleware.RequireScope(auth.ScopeSCMManage), scmOAuthHandlers.RefreshToken)
+
+				// PAT-based auth (e.g., Bitbucket Data Center)
+				scmProvidersGroup.POST("/:id/token", middleware.RequireScope(auth.ScopeSCMManage), scmOAuthHandlers.SavePATToken)
 			}
 
 			// SCM OAuth callback (public endpoint, no auth required)

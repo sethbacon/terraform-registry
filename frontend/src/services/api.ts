@@ -456,8 +456,8 @@ class ApiClient {
     provider_type: string;
     name: string;
     base_url?: string | null;
-    client_id: string;
-    client_secret: string;
+    client_id?: string;
+    client_secret?: string;
     webhook_secret?: string;
   }) {
     const response = await this.client.post('/api/v1/scm-providers', data);
@@ -502,6 +502,13 @@ class ApiClient {
 
   async revokeSCMToken(providerId: string) {
     const response = await this.client.delete(`/api/v1/scm-providers/${providerId}/oauth/token`);
+    return response.data;
+  }
+
+  async saveSCMToken(providerId: string, accessToken: string) {
+    const response = await this.client.post(`/api/v1/scm-providers/${providerId}/token`, {
+      access_token: accessToken,
+    });
     return response.data;
   }
 

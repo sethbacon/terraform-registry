@@ -71,11 +71,16 @@ func (h *SCMWebhookHandler) HandleWebhook(c *gin.Context) {
 	}
 
 	// Build connector for this provider
+	baseURL := ""
+	if provider.BaseURL != nil {
+		baseURL = *provider.BaseURL
+	}
 	connector, err := scm.BuildConnector(&scm.ConnectorSettings{
-		Kind:         provider.ProviderType,
-		ClientID:     provider.ClientID,
-		ClientSecret: provider.ClientSecretEncrypted, // Will need decryption
-		CallbackURL:  "",
+		Kind:            provider.ProviderType,
+		InstanceBaseURL: baseURL,
+		ClientID:        provider.ClientID,
+		ClientSecret:    provider.ClientSecretEncrypted, // Will need decryption
+		CallbackURL:     "",
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create connector"})
@@ -144,6 +149,8 @@ func (h *SCMWebhookHandler) getSignatureHeader(req *http.Request, providerType s
 		return req.Header.Get("X-Gitlab-Token")
 	case scm.ProviderAzureDevOps:
 		return req.Header.Get("X-Vss-Signature")
+	case scm.ProviderBitbucketDC:
+		return req.Header.Get("X-Hub-Signature")
 	default:
 		return ""
 	}

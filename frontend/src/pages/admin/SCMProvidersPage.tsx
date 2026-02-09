@@ -42,6 +42,9 @@ const SCMProvidersPage: React.FC = () => {
   const [editingProvider, setEditingProvider] = useState<SCMProvider | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [providerToDelete, setProviderToDelete] = useState<SCMProvider | null>(null);
+  const [patDialogOpen, setPatDialogOpen] = useState(false);
+  const [patValue, setPatValue] = useState('');
+  const [patProvider, setPatProvider] = useState<SCMProvider | null>(null);
 
   const [formData, setFormData] = useState<Partial<CreateSCMProviderRequest>>({
     organization_id: '00000000-0000-0000-0000-000000000000', // Default org
@@ -115,15 +118,35 @@ const SCMProvidersPage: React.FC = () => {
     }
   };
 
-  const handleOAuthConnect = async (provider: SCMProvider) => {
-    try {
-      const response = await apiClient.initiateSCMOAuth(provider.id);
-      // Redirect to OAuth authorization URL
-      window.location.href = response.authorization_url;
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to initiate OAuth');
+  const handleConnect = async (provider: SCMProvider) => {
+    if (provider.provider_type === 'bitbucket_dc') {
+      setPatProvider(provider);
+      setPatValue('');
+      setPatDialogOpen(true);
+    } else {
+      try {
+        const response = await apiClient.initiateSCMOAuth(provider.id);
+        window.location.href = response.authorization_url;
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to initiate OAuth');
+      }
     }
   };
+
+  const handleSavePAT = async () => {
+    if (!patProvider || !patValue) return;
+    try {
+      setError(null);
+      await apiClient.saveSCMToken(patProvider.id, patValue);
+      setPatDialogOpen(false);
+      setPatValue('');
+      setPatProvider(null);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to save access token');
+    }
+  };
+
+  const isPATProvider = (type?: SCMProviderType) => type === 'bitbucket_dc';
 
   const resetForm = () => {
     setFormData({
@@ -156,6 +179,8 @@ const SCMProvidersPage: React.FC = () => {
         return <CloudIcon />;
       case 'gitlab':
         return <CloudIcon />;
+      case 'bitbucket_dc':
+        return <CloudIcon />;
       default:
         return <CloudIcon />;
     }
@@ -169,6 +194,8 @@ const SCMProvidersPage: React.FC = () => {
         return 'Azure DevOps';
       case 'gitlab':
         return 'GitLab';
+      case 'bitbucket_dc':
+        return 'Bitbucket Data Center';
       default:
         return type;
     }
@@ -208,6 +235,8 @@ const SCMProvidersPage: React.FC = () => {
         return 'For Azure DevOps Server: https://dev.azure.com/organization';
       case 'gitlab':
         return 'For self-hosted GitLab: https://gitlab.company.com';
+      case 'bitbucket_dc':
+        return 'Required: https://bitbucket.company.com';
       default:
         return 'For self-hosted instances';
     }
@@ -289,11 +318,11 @@ const SCMProvidersPage: React.FC = () => {
               </CardContent>
 
               <CardActions>
-                <Tooltip title="Connect OAuth">
+                <Tooltip title={provider.provider_type === 'bitbucket_dc' ? 'Connect PAT' : 'Connect OAuth'}>
                   <IconButton
                     size="small"
                     color="primary"
-                    onClick={() => handleOAuthConnect(provider)}
+                    onClick={() => handleConnect(provider)}
                   >
                     <LinkIcon />
                   </IconButton>
@@ -364,6 +393,7 @@ const SCMProvidersPage: React.FC = () => {
                   <MenuItem value="github">GitHub</MenuItem>
                   <MenuItem value="azure_devops">Azure DevOps</MenuItem>
                   <MenuItem value="gitlab">GitLab</MenuItem>
+                  <MenuItem value="bitbucket_dc">Bitbucket Data Center</MenuItem>
                 </Select>
               </FormControl>
             )}
@@ -376,31 +406,36 @@ const SCMProvidersPage: React.FC = () => {
               required
             />
 
-            <TextField
-              label={getClientIdLabel(editingProvider?.provider_type || formData.provider_type || 'github')}
-              fullWidth
-              value={formData.client_id}
-              onChange={(e) => setFormData({ ...formData, client_id: e.target.value })}
-              required
-            />
+            {!isPATProvider(editingProvider?.provider_type || formData.provider_type) && (
+              <>
+                <TextField
+                  label={getClientIdLabel(editingProvider?.provider_type || formData.provider_type || 'github')}
+                  fullWidth
+                  value={formData.client_id}
+                  onChange={(e) => setFormData({ ...formData, client_id: e.target.value })}
+                  required
+                />
+
+                <TextField
+                  label={getClientSecretLabel(editingProvider?.provider_type || formData.provider_type || 'github')}
+                  type="password"
+                  fullWidth
+                  value={formData.client_secret}
+                  onChange={(e) => setFormData({ ...formData, client_secret: e.target.value })}
+                  required={!editingProvider}
+                  helperText={editingProvider ? 'Leave blank to keep existing secret' : ''}
+                />
+              </>
+            )}
 
             <TextField
-              label={getClientSecretLabel(editingProvider?.provider_type || formData.provider_type || 'github')}
-              type="password"
-              fullWidth
-              value={formData.client_secret}
-              onChange={(e) => setFormData({ ...formData, client_secret: e.target.value })}
-              required={!editingProvider}
-              helperText={editingProvider ? 'Leave blank to keep existing secret' : ''}
-            />
-
-            <TextField
-              label="Base URL (optional)"
+              label={isPATProvider(editingProvider?.provider_type || formData.provider_type) ? 'Base URL' : 'Base URL (optional)'}
               fullWidth
               value={formData.base_url || ''}
               onChange={(e) =>
                 setFormData({ ...formData, base_url: e.target.value || null })
               }
+              required={isPATProvider(editingProvider?.provider_type || formData.provider_type)}
               helperText={getBaseUrlHelper(editingProvider?.provider_type || formData.provider_type || 'github')}
             />
 
@@ -426,7 +461,7 @@ const SCMProvidersPage: React.FC = () => {
           <Button
             variant="contained"
             onClick={editingProvider ? handleUpdate : handleCreate}
-            disabled={!formData.name || !formData.client_id}
+            disabled={!formData.name || (!isPATProvider(formData.provider_type) && !formData.client_id) || (isPATProvider(formData.provider_type) && !formData.base_url)}
           >
             {editingProvider ? 'Update' : 'Create'}
           </Button>
@@ -446,6 +481,55 @@ const SCMProvidersPage: React.FC = () => {
           <Button onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
           <Button variant="contained" color="error" onClick={handleDelete}>
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* PAT Dialog for Bitbucket Data Center */}
+      <Dialog
+        open={patDialogOpen}
+        onClose={() => {
+          setPatDialogOpen(false);
+          setPatValue('');
+          setPatProvider(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Connect to {patProvider?.name}</DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography variant="body2" color="textSecondary">
+              Enter your Bitbucket Data Center Personal Access Token. You can generate one from your
+              Bitbucket account settings under HTTP access tokens.
+            </Typography>
+            <TextField
+              label="Personal Access Token"
+              type="password"
+              fullWidth
+              value={patValue}
+              onChange={(e) => setPatValue(e.target.value)}
+              required
+              autoFocus
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setPatDialogOpen(false);
+              setPatValue('');
+              setPatProvider(null);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSavePAT}
+            disabled={!patValue}
+          >
+            Save Token
           </Button>
         </DialogActions>
       </Dialog>

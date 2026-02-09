@@ -17,6 +17,10 @@ var (
 	ErrCallbackURLRequired  = ErrMissingRedirectURL
 	ErrConnectorUnavailable = ErrProviderNotSupported
 
+	// PAT errors
+	ErrPATRequired  = errors.New("this provider requires a Personal Access Token")
+	ErrPATAuthNeeded = ErrPATRequired
+
 	// OAuth errors
 	ErrOAuthCodeExchange      = errors.New("failed to exchange OAuth code")
 	ErrOAuthTokenRefresh      = errors.New("failed to refresh OAuth token")

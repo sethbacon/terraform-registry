@@ -62,12 +62,26 @@ func (h *SCMOAuthHandlers) InitiateOAuth(c *gin.Context) {
 		return
 	}
 
+	// PAT-based providers don't use OAuth
+	if provider.ProviderType.IsPATBased() {
+		c.JSON(http.StatusOK, gin.H{
+			"auth_method": "pat",
+			"message":     "This provider requires a Personal Access Token. Use POST /api/v1/scm-providers/:id/token to save your PAT.",
+		})
+		return
+	}
+
 	// Build connector
+	baseURL := ""
+	if provider.BaseURL != nil {
+		baseURL = *provider.BaseURL
+	}
 	connector, err := scm.BuildConnector(&scm.ConnectorSettings{
-		Kind:         provider.ProviderType,
-		ClientID:     provider.ClientID,
-		ClientSecret: provider.ClientSecretEncrypted,
-		CallbackURL:  fmt.Sprintf("%s/api/v1/scm-providers/%s/oauth/callback", h.cfg.Server.BaseURL, providerID),
+		Kind:            provider.ProviderType,
+		InstanceBaseURL: baseURL,
+		ClientID:        provider.ClientID,
+		ClientSecret:    provider.ClientSecretEncrypted,
+		CallbackURL:     fmt.Sprintf("%s/api/v1/scm-providers/%s/oauth/callback", h.cfg.Server.BaseURL, providerID),
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create connector"})
@@ -354,6 +368,90 @@ func (h *SCMOAuthHandlers) RefreshToken(c *gin.Context) {
 		"message":    "token refreshed",
 		"expires_at": newToken.ExpiresAt,
 	})
+}
+
+// SavePATToken stores a Personal Access Token for a PAT-based SCM provider
+// POST /api/v1/scm-providers/:id/token
+func (h *SCMOAuthHandlers) SavePATToken(c *gin.Context) {
+	providerIDStr := c.Param("id")
+	providerID, err := uuid.Parse(providerIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid provider ID"})
+		return
+	}
+
+	// Get user ID from context
+	userIDValue, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+
+	userID, ok := userIDValue.(uuid.UUID)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID"})
+		return
+	}
+
+	// Parse request
+	var req struct {
+		AccessToken string `json:"access_token" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "access_token is required"})
+		return
+	}
+
+	// Get provider configuration
+	provider, err := h.scmRepo.GetProvider(c.Request.Context(), providerID)
+	if err != nil || provider == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+		return
+	}
+
+	// Verify this is a PAT-based provider
+	if !provider.ProviderType.IsPATBased() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "this provider uses OAuth, not Personal Access Tokens"})
+		return
+	}
+
+	// Encrypt the PAT
+	encryptedToken, err := h.tokenCipher.Seal(req.AccessToken)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to encrypt token"})
+		return
+	}
+
+	patScopes := "repo"
+	tokenRecord := &scm.SCMUserTokenRecord{
+		ID:                   uuid.New(),
+		UserID:               userID,
+		SCMProviderID:        providerID,
+		AccessTokenEncrypted: encryptedToken,
+		TokenType:            "pat",
+		Scopes:               &patScopes,
+		CreatedAt:            time.Now(),
+		UpdatedAt:            time.Now(),
+	}
+
+	// Upsert: check if token already exists
+	existingToken, err := h.scmRepo.GetUserToken(c.Request.Context(), userID, providerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check existing token"})
+		return
+	}
+
+	if existingToken != nil {
+		tokenRecord.ID = existingToken.ID
+		tokenRecord.CreatedAt = existingToken.CreatedAt
+	}
+
+	if err := h.scmRepo.SaveUserToken(c.Request.Context(), tokenRecord); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Personal Access Token saved successfully"})
 }
 
 // Helper function to split string

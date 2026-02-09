@@ -1014,7 +1014,20 @@ GET/POST/DELETE /api/v1/api-keys
     - `variables.tf` - Project ID, region, domain, DB tier, image tag, instance counts, secrets
     - `outputs.tf` - Frontend/backend URLs, Cloud SQL connection, GCS bucket, Artifact Registry URL
 - **Session 22**: Phase 6 - SCM addition - Add Bitbucket Datacenter as an SCM for modules, fixup backend and frontend support
-- **Session 23**: Phase 6 - Add terraform configuration for storage configuration options to deployments
+- **Session 23** ✅: Phase 6 - Storage configuration variables in Terraform deployments
+  - Added `storage_backend` variable (with validation) and ~15 storage-specific variables to all 3 Terraform configs
+  - Each cloud defaults to its native storage (S3 for AWS, Azure Blob for Azure, GCS for GCP) with zero extra config needed
+  - All 4 backends (S3, Azure, GCS, local) available as alternatives in every cloud config
+  - **AWS** (`deployments/terraform/aws/`):
+    - `variables.tf`: Added storage variables with S3 native defaults (IAM role auth)
+    - `main.tf`: `locals` block builds conditional `storage_env` and `storage_secrets` lists; merged into ECS task definition via `concat()`; conditional Secrets Manager resources for non-native storage credentials; IAM execution role includes storage secret ARNs
+  - **Azure** (`deployments/terraform/azure/`):
+    - `variables.tf`: Added storage variables with Azure native defaults
+    - `main.tf`: **Fixed critical bug**: added `TFR_STORAGE_AZURE_ACCOUNT_KEY` as Container App secret (from `azurerm_storage_account.main.primary_access_key`); `dynamic "secret"` and `dynamic "env"` blocks for conditional storage config; separate `storage_secret_env` local for secret-referenced env vars
+  - **GCP** (`deployments/terraform/gcp/`):
+    - `variables.tf`: Added storage variables with GCS native defaults (Workload Identity)
+    - `main.tf`: Added missing `TFR_STORAGE_GCS_AUTH_METHOD` env var; `dynamic "env"` blocks for value-based and secret-referenced storage vars; conditional Secret Manager resources for GCS credentials, S3 keys, Azure account key
+  - All 6 files pass `terraform fmt` and `terraform validate`
 - **Session 24** ✅: Phase 6 - API key frontend: expiration, rotation & edit
   - Enhanced `frontend/src/pages/admin/APIKeysPage.tsx` with full API key lifecycle management:
     - **Create dialog**: Added optional expiration date field (`<TextField type="datetime-local">`)
@@ -1036,10 +1049,10 @@ GET/POST/DELETE /api/v1/api-keys
 
 ---
 
-**Last Updated**: Session 24 - 2026-02-08
-**Status**: ✅ Session 24 COMPLETE - API key frontend: expiration, rotation & edit
-**Next Session**: Session 23 - Storage configuration in deployment configs (working backwards)
-**Priority**: Phase 6 (Deployment) - Storage configuration in IaC
+**Last Updated**: Session 23 - 2026-02-08
+**Status**: ✅ Session 23 COMPLETE - Storage configuration variables in Terraform deployments
+**Next Session**: Session 22 - SCM addition (Bitbucket Datacenter)
+**Priority**: Phase 6 (Deployment) - SCM integration expansion
 **Deferred**: Phase 5B (Azure DevOps Extension) - Will implement based on future demand
 
 **Note**: After Session 19, to activate the storage configuration UI:

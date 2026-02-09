@@ -33,8 +33,8 @@ type CreateSCMProviderRequest struct {
 	ProviderType   scm.ProviderType `json:"provider_type" binding:"required"`
 	Name           string           `json:"name" binding:"required"`
 	BaseURL        *string          `json:"base_url,omitempty"`
-	ClientID       string           `json:"client_id" binding:"required"`
-	ClientSecret   string           `json:"client_secret" binding:"required"`
+	ClientID       string           `json:"client_id"`
+	ClientSecret   string           `json:"client_secret"`
 	WebhookSecret  string           `json:"webhook_secret" binding:"required"`
 }
 
@@ -57,9 +57,32 @@ func (h *SCMProviderHandlers) CreateProvider(c *gin.Context) {
 	}
 
 	// Validate provider type
-	if req.ProviderType != scm.ProviderGitHub && req.ProviderType != scm.ProviderAzureDevOps && req.ProviderType != scm.ProviderGitLab {
+	if !req.ProviderType.Valid() {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid provider type"})
 		return
+	}
+
+	// PAT-based providers don't require OAuth credentials
+	if req.ProviderType.IsPATBased() {
+		if req.BaseURL == nil || *req.BaseURL == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "base_url is required for Bitbucket Data Center"})
+			return
+		}
+		if req.ClientID == "" {
+			req.ClientID = "pat-auth"
+		}
+		if req.ClientSecret == "" {
+			req.ClientSecret = "not-applicable"
+		}
+	} else {
+		if req.ClientID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "client_id is required for OAuth providers"})
+			return
+		}
+		if req.ClientSecret == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "client_secret is required for OAuth providers"})
+			return
+		}
 	}
 
 	// Encrypt client secret
