@@ -984,12 +984,13 @@ GET/POST/DELETE /api/v1/api-keys
   - Verified: `helm lint` passes, `helm template` renders valid manifests, `kustomize build` passes for base and all overlays, frontend Docker image builds successfully
 - **Session 21**: Phase 6 - Deployment Configurations - Azure Container Apps, binary deployment, AWS ECS
 - **Session 22**: Phase 6 - SCM addition - Add Bitbucket Datacenter as an SCM for modules, fixup backend and frontend support
-- **Session 23**: Phase 7 - Documentation & Testing - Unit and integration tests
-- **Session 24**: Phase 7 - Documentation & Testing - E2E tests and security scanning
-- **Session 25**: Phase 7 - Documentation & Testing - Comprehensive docs (features, security, configuration, deployment, apis, troubleshooting, contributing, testing)
-- **Session 26**: Phase 8 - Production Polish - Security hardening, audit logging, scan codebase for opensource license attribution violations
-- **Session 27**: Phase 8 - Production Polish - Monitoring, observability, performance, optimization
-- **Session 28**: Phase 8 - Production Polish - Final testing, deployment checklist, github actions for dependabot bi-weekly builds
+- **Session 23**: Phase 6 - API key frontend configuration interface for managing key expiration and key rotation
+- **Session 24**: Phase 7 - Documentation & Testing - Unit and integration tests
+- **Session 25**: Phase 7 - Documentation & Testing - E2E tests and security scanning
+- **Session 26**: Phase 7 - Documentation & Testing - Comprehensive docs (features, security, configuration, deployment, apis, troubleshooting, contributing, testing)
+- **Session 27**: Phase 8 - Production Polish - Security hardening, audit logging, scan codebase for opensource license attribution violations
+- **Session 28**: Phase 8 - Production Polish - Monitoring, observability, performance, optimization
+- **Session 29**: Phase 8 - Production Polish - Final testing, deployment checklist, github actions for dependabot bi-weekly builds
 
 ---
 
