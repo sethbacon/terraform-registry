@@ -984,13 +984,15 @@ GET/POST/DELETE /api/v1/api-keys
   - Verified: `helm lint` passes, `helm template` renders valid manifests, `kustomize build` passes for base and all overlays, frontend Docker image builds successfully
 - **Session 21**: Phase 6 - Deployment Configurations - Azure Container Apps, binary deployment, AWS ECS
 - **Session 22**: Phase 6 - SCM addition - Add Bitbucket Datacenter as an SCM for modules, fixup backend and frontend support
-- **Session 23**: Phase 6 - API key frontend configuration interface for managing key expiration and key rotation
-- **Session 24**: Phase 7 - Documentation & Testing - Unit and integration tests
-- **Session 25**: Phase 7 - Documentation & Testing - E2E tests and security scanning
-- **Session 26**: Phase 7 - Documentation & Testing - Comprehensive docs (features, security, configuration, deployment, apis, troubleshooting, contributing, testing)
-- **Session 27**: Phase 8 - Production Polish - Security hardening, audit logging, scan codebase for opensource license attribution violations
-- **Session 28**: Phase 8 - Production Polish - Monitoring, observability, performance, optimization
-- **Session 29**: Phase 8 - Production Polish - Final testing, deployment checklist, github actions for dependabot bi-weekly builds
+- **Session 23**: Phase 6 - Add terraform configuration for storage configuration options to deployments
+- **Session 24**: Phase 6 - API key frontend configuration interface for managing key expiration and key rotation
+- **Session 25**: Phase 7 - Documentation & Testing - Unit and integration tests, evaluate database migrations for consolidation/refactoring
+- **Session 26**: Phase 7 - Documentation & Testing - E2E tests and security scanning
+- **Session 27**: Phase 7 - Documentation & Testing - Comprehensive docs (features, security, configuration, deployment, apis, troubleshooting, contributing, testing)
+- **Session 28**: Phase 8 - Production Polish - Security hardening, audit logging, scan codebase for opensource license attribution violations (are we using any opensource code that we should be correctly attributing based on the code's license and re-use constraints?), license evaluation, based on the type of application we are releasing, is MIT license the best choice? should it be MPL or another opensource license?
+- **Session 29**: Phase 8 - Production Polish - Monitoring, observability, performance, optimization
+- **Session 30**: Phase 8 - Production Polish - Final testing, deployment checklist, github actions for dependabot bi-weekly builds
+- **Session 31**: Phase 8 - Production Polish - Evaluate whether a visual studio marketplace azure devops extension would be useful (formerly Phase 5B)
 
 ---
 
