@@ -100,8 +100,8 @@ func RequireAllScopes(scopes ...auth.Scope) gin.HandlerFunc {
 	}
 }
 
-// RequireRole checks if user has the required organization role
-func RequireRole(minRole string, orgRepo *repositories.OrganizationRepository) gin.HandlerFunc {
+// RequireOrgMembership checks if user is a member of the specified organization
+func RequireOrgMembership(orgRepo *repositories.OrganizationRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get user from context
 		userVal, userExists := c.Get("user_id")
@@ -137,7 +137,7 @@ func RequireRole(minRole string, orgRepo *repositories.OrganizationRepository) g
 			return
 		}
 
-		// Check membership and role
+		// Check membership
 		member, err := orgRepo.GetMember(c.Request.Context(), orgID, userID)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
@@ -153,34 +153,80 @@ func RequireRole(minRole string, orgRepo *repositories.OrganizationRepository) g
 			return
 		}
 
-		// Role hierarchy: viewer < member < admin < owner
-		if !hasRequiredRole(member.Role, minRole) {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-				"error":   "Insufficient role",
-				"details": "Required role: " + minRole + ", current role: " + member.Role,
-			})
-			return
-		}
+		// Store role template ID in context for later use
+		c.Set("org_role_template_id", member.RoleTemplateID)
 
 		c.Next()
 	}
 }
 
-// hasRequiredRole checks if userRole meets the minimum required role
-func hasRequiredRole(userRole, minRole string) bool {
-	roleHierarchy := map[string]int{
-		"viewer": 1,
-		"member": 2,
-		"admin":  3,
-		"owner":  4,
+// RequireOrgScope checks if user has the required scope for the organization
+// This combines org membership check with scope check based on role template
+func RequireOrgScope(scope auth.Scope, orgRepo *repositories.OrganizationRepository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get user from context
+		userVal, userExists := c.Get("user_id")
+		if !userExists {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error": "User not authenticated",
+			})
+			return
+		}
+
+		userID, ok := userVal.(string)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error": "Invalid user ID format",
+			})
+			return
+		}
+
+		// Get organization from context
+		orgVal, orgExists := c.Get("organization_id")
+		if !orgExists {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error": "Organization context not found",
+			})
+			return
+		}
+
+		orgID, ok := orgVal.(string)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error": "Invalid organization ID format",
+			})
+			return
+		}
+
+		// Get membership with role template
+		memberWithRole, err := orgRepo.GetMemberWithRole(c.Request.Context(), orgID, userID)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to check organization membership",
+			})
+			return
+		}
+
+		if memberWithRole == nil {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error": "Not a member of organization",
+			})
+			return
+		}
+
+		// Check if user has required scope via role template
+		if !auth.HasScope(memberWithRole.RoleTemplateScopes, scope) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error":   "Missing required scope for organization",
+				"details": "Required scope: " + string(scope),
+			})
+			return
+		}
+
+		// Store role template info in context for later use
+		c.Set("org_role_template_id", memberWithRole.RoleTemplateID)
+		c.Set("org_role_template_scopes", memberWithRole.RoleTemplateScopes)
+
+		c.Next()
 	}
-
-	userLevel, userExists := roleHierarchy[userRole]
-	minLevel, minExists := roleHierarchy[minRole]
-
-	if !userExists || !minExists {
-		return false
-	}
-
-	return userLevel >= minLevel
 }

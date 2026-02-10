@@ -19,6 +19,7 @@ type Config struct {
 	Security      SecurityConfig      `mapstructure:"security"`
 	Logging       LoggingConfig       `mapstructure:"logging"`
 	Telemetry     TelemetryConfig     `mapstructure:"telemetry"`
+	Audit         AuditConfig         `mapstructure:"audit"`
 }
 
 // ServerConfig holds HTTP server configuration
@@ -46,6 +47,7 @@ type StorageConfig struct {
 	DefaultBackend string              `mapstructure:"default_backend"`
 	Azure          AzureStorageConfig  `mapstructure:"azure"`
 	S3             S3StorageConfig     `mapstructure:"s3"`
+	GCS            GCSStorageConfig    `mapstructure:"gcs"`
 	Local          LocalStorageConfig  `mapstructure:"local"`
 }
 
@@ -59,11 +61,58 @@ type AzureStorageConfig struct {
 
 // S3StorageConfig holds S3-compatible storage configuration
 type S3StorageConfig struct {
-	Endpoint        string `mapstructure:"endpoint"`
-	Region          string `mapstructure:"region"`
-	Bucket          string `mapstructure:"bucket"`
+	// Endpoint is the S3-compatible endpoint URL (optional, for MinIO, DigitalOcean Spaces, etc.)
+	Endpoint string `mapstructure:"endpoint"`
+	// Region is the AWS region
+	Region string `mapstructure:"region"`
+	// Bucket is the S3 bucket name
+	Bucket string `mapstructure:"bucket"`
+
+	// Authentication method: "default", "static", "oidc", "assume_role"
+	// - "default": Use AWS default credential chain (env vars, shared config, IAM role, etc.)
+	// - "static": Use explicit access key and secret key
+	// - "oidc": Use Web Identity/OIDC token for authentication (EKS, GitHub Actions, etc.)
+	// - "assume_role": Assume an IAM role (optionally with external ID for cross-account)
+	AuthMethod string `mapstructure:"auth_method"`
+
+	// Static credentials (when auth_method is "static" or empty for backwards compatibility)
 	AccessKeyID     string `mapstructure:"access_key_id"`
 	SecretAccessKey string `mapstructure:"secret_access_key"`
+
+	// AssumeRole configuration (when auth_method is "assume_role" or "oidc")
+	RoleARN         string `mapstructure:"role_arn"`
+	RoleSessionName string `mapstructure:"role_session_name"`
+	ExternalID      string `mapstructure:"external_id"`
+
+	// OIDC/Web Identity configuration (when auth_method is "oidc")
+	// WebIdentityTokenFile is the path to the OIDC token file (e.g., from EKS or GitHub Actions)
+	WebIdentityTokenFile string `mapstructure:"web_identity_token_file"`
+}
+
+// GCSStorageConfig holds Google Cloud Storage configuration
+type GCSStorageConfig struct {
+	// Bucket is the GCS bucket name
+	Bucket string `mapstructure:"bucket"`
+
+	// ProjectID is the Google Cloud project ID (optional if using default credentials)
+	ProjectID string `mapstructure:"project_id"`
+
+	// Authentication method: "default", "service_account", "workload_identity"
+	// - "default": Use Application Default Credentials (ADC) - recommended for GCP-native deployments
+	// - "service_account": Use a service account key file
+	// - "workload_identity": Use Workload Identity Federation (GKE, GitHub Actions, etc.)
+	AuthMethod string `mapstructure:"auth_method"`
+
+	// CredentialsFile is the path to a service account JSON key file
+	// (when auth_method is "service_account")
+	CredentialsFile string `mapstructure:"credentials_file"`
+
+	// CredentialsJSON is the service account JSON key as a string
+	// (alternative to credentials_file, useful for environment variables)
+	CredentialsJSON string `mapstructure:"credentials_json"`
+
+	// Endpoint is an optional custom endpoint (for GCS emulators or compatible services)
+	Endpoint string `mapstructure:"endpoint"`
 }
 
 // LocalStorageConfig holds local filesystem storage configuration
@@ -172,6 +221,56 @@ type ProfilingConfig struct {
 	Port    int  `mapstructure:"port"`
 }
 
+// AuditConfig holds audit logging configuration
+type AuditConfig struct {
+	// Enabled determines if audit logging is active
+	Enabled bool `mapstructure:"enabled"`
+	// LogReadOperations determines if GET requests should be logged
+	LogReadOperations bool `mapstructure:"log_read_operations"`
+	// LogFailedRequests determines if failed requests (4xx/5xx) should be logged
+	LogFailedRequests bool `mapstructure:"log_failed_requests"`
+	// Shippers configures external log shipping
+	Shippers []AuditShipperConfig `mapstructure:"shippers"`
+}
+
+// AuditShipperConfig holds configuration for a single audit shipper
+type AuditShipperConfig struct {
+	// Enabled determines if this shipper is active
+	Enabled bool `mapstructure:"enabled"`
+	// Type is the shipper type (syslog, webhook, file)
+	Type string `mapstructure:"type"`
+	// Syslog configuration
+	Syslog *AuditSyslogConfig `mapstructure:"syslog"`
+	// Webhook configuration
+	Webhook *AuditWebhookConfig `mapstructure:"webhook"`
+	// File configuration
+	File *AuditFileConfig `mapstructure:"file"`
+}
+
+// AuditSyslogConfig holds syslog shipper configuration
+type AuditSyslogConfig struct {
+	Network  string `mapstructure:"network"`  // udp, tcp, unix
+	Address  string `mapstructure:"address"`  // server address
+	Tag      string `mapstructure:"tag"`      // syslog tag
+	Facility string `mapstructure:"facility"` // syslog facility
+}
+
+// AuditWebhookConfig holds webhook shipper configuration
+type AuditWebhookConfig struct {
+	URL           string            `mapstructure:"url"`
+	Headers       map[string]string `mapstructure:"headers"`
+	TimeoutSecs   int               `mapstructure:"timeout_secs"`
+	BatchSize     int               `mapstructure:"batch_size"`
+	FlushInterval int               `mapstructure:"flush_interval_secs"`
+}
+
+// AuditFileConfig holds file shipper configuration
+type AuditFileConfig struct {
+	Path       string `mapstructure:"path"`
+	MaxSizeMB  int    `mapstructure:"max_size_mb"`
+	MaxBackups int    `mapstructure:"max_backups"`
+}
+
 // bindEnvVars explicitly binds environment variables to config keys
 // This is necessary because AutomaticEnv() doesn't work well with nested structs during Unmarshal
 func bindEnvVars(v *viper.Viper) {
@@ -200,8 +299,19 @@ func bindEnvVars(v *viper.Viper) {
 	v.BindEnv("storage.s3.endpoint")
 	v.BindEnv("storage.s3.region")
 	v.BindEnv("storage.s3.bucket")
+	v.BindEnv("storage.s3.auth_method")
 	v.BindEnv("storage.s3.access_key_id")
 	v.BindEnv("storage.s3.secret_access_key")
+	v.BindEnv("storage.s3.role_arn")
+	v.BindEnv("storage.s3.role_session_name")
+	v.BindEnv("storage.s3.external_id")
+	v.BindEnv("storage.s3.web_identity_token_file")
+	v.BindEnv("storage.gcs.bucket")
+	v.BindEnv("storage.gcs.project_id")
+	v.BindEnv("storage.gcs.auth_method")
+	v.BindEnv("storage.gcs.credentials_file")
+	v.BindEnv("storage.gcs.credentials_json")
+	v.BindEnv("storage.gcs.endpoint")
 	v.BindEnv("storage.local.base_path")
 	v.BindEnv("storage.local.serve_directly")
 
@@ -393,9 +503,9 @@ func (c *Config) Validate() error {
 	}
 
 	// Validate storage backend
-	validBackends := map[string]bool{"azure": true, "s3": true, "local": true}
+	validBackends := map[string]bool{"azure": true, "s3": true, "gcs": true, "local": true}
 	if !validBackends[c.Storage.DefaultBackend] {
-		return fmt.Errorf("invalid storage backend: %s (must be azure, s3, or local)", c.Storage.DefaultBackend)
+		return fmt.Errorf("invalid storage backend: %s (must be azure, s3, gcs, or local)", c.Storage.DefaultBackend)
 	}
 
 	// Validate Azure storage if enabled
@@ -418,6 +528,13 @@ func (c *Config) Validate() error {
 		}
 		if c.Storage.S3.Region == "" {
 			return fmt.Errorf("storage.s3.region is required when using S3 backend")
+		}
+	}
+
+	// Validate GCS storage if enabled
+	if c.Storage.DefaultBackend == "gcs" {
+		if c.Storage.GCS.Bucket == "" {
+			return fmt.Errorf("storage.gcs.bucket is required when using GCS backend")
 		}
 	}
 

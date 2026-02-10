@@ -17,9 +17,21 @@ const (
 	ScopeProvidersRead  Scope = "providers:read"
 	ScopeProvidersWrite Scope = "providers:write"
 
+	// Mirror scopes (for provider network mirroring)
+	ScopeMirrorsRead   Scope = "mirrors:read"   // View mirror configurations and sync status
+	ScopeMirrorsManage Scope = "mirrors:manage" // Create, update, delete mirrors and trigger syncs
+
 	// User management scopes
 	ScopeUsersRead  Scope = "users:read"
 	ScopeUsersWrite Scope = "users:write"
+
+	// Organization management scopes
+	ScopeOrganizationsRead  Scope = "organizations:read"  // View organizations and members
+	ScopeOrganizationsWrite Scope = "organizations:write" // Create, update, delete organizations and manage members
+
+	// SCM provider management scopes
+	ScopeSCMRead   Scope = "scm:read"   // View SCM provider configurations
+	ScopeSCMManage Scope = "scm:manage" // Create, update, delete SCM providers and manage OAuth
 
 	// API key management scopes
 	ScopeAPIKeysManage Scope = "api_keys:manage"
@@ -38,8 +50,14 @@ func AllScopes() []Scope {
 		ScopeModulesWrite,
 		ScopeProvidersRead,
 		ScopeProvidersWrite,
+		ScopeMirrorsRead,
+		ScopeMirrorsManage,
 		ScopeUsersRead,
 		ScopeUsersWrite,
+		ScopeOrganizationsRead,
+		ScopeOrganizationsWrite,
+		ScopeSCMRead,
+		ScopeSCMManage,
 		ScopeAPIKeysManage,
 		ScopeAuditRead,
 		ScopeAdmin,
@@ -85,7 +103,7 @@ func HasScope(userScopes []string, required Scope) bool {
 		}
 
 		// Check for wildcard read permissions
-		// If user has write permission, they also have read permission
+		// If user has write/manage permission, they also have read permission
 		if required == ScopeModulesRead && scope == string(ScopeModulesWrite) {
 			return true
 		}
@@ -93,6 +111,15 @@ func HasScope(userScopes []string, required Scope) bool {
 			return true
 		}
 		if required == ScopeUsersRead && scope == string(ScopeUsersWrite) {
+			return true
+		}
+		if required == ScopeMirrorsRead && scope == string(ScopeMirrorsManage) {
+			return true
+		}
+		if required == ScopeOrganizationsRead && scope == string(ScopeOrganizationsWrite) {
+			return true
+		}
+		if required == ScopeSCMRead && scope == string(ScopeSCMManage) {
 			return true
 		}
 	}

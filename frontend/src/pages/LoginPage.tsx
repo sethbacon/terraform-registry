@@ -12,31 +12,28 @@ import {
 import { Login as LoginIcon } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { apiClient } from '../services/api';
 
 const LoginPage: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
   const isDev = import.meta.env.DEV;
 
-  const handleDevLogin = () => {
-    // Store the development API key
-    localStorage.setItem('auth_token', 'dev_qHlTX4JvjK1yVUgRukLlgiwFQmFOiHdEhHYVJNfhNXc');
-    
-    // Mock user for development
-    const mockUser = {
-      id: 'd3d54cbf-071b-4835-9563-529681a60a99', // Actual user ID from database
-      email: 'admin@dev.local',
-      username: 'Dev Admin',
-      role: 'admin' as const,
-      organization_id: 'dev-org-1',
-      organization_name: 'Development Org',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    console.log('Dev login: setting user and API key');
-    login(mockUser);
-    console.log('Dev login: navigating to home');
-    setTimeout(() => navigate('/'), 100); // Small delay to ensure state is set
+  const handleDevLogin = async () => {
+    // Call the dev login endpoint to get a JWT (no hardcoded keys)
+    // This endpoint is gated by DevModeMiddleware and returns 403 in production
+    const response = await apiClient.devLogin();
+    localStorage.setItem('auth_token', response.token);
+
+    // Clear any cached user data to force fresh fetch from API
+    localStorage.removeItem('user');
+    localStorage.removeItem('role_template');
+    localStorage.removeItem('allowed_scopes');
+
+    // login() will call fetchCurrentUser() which validates the JWT via /auth/me
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await login({} as any);
+    navigate('/');
   };
 
   const handleOIDCLogin = () => {

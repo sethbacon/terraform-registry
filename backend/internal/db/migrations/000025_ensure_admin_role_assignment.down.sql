@@ -1,0 +1,4 @@
+-- Migration 025 rollback: No action needed
+-- This migration only ensures proper role assignments and doesn't add new schema.
+-- Rolling back would leave users without proper role assignments which is undesirable.
+-- The data changes are idempotent and safe to keep.

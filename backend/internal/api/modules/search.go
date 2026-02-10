@@ -37,24 +37,29 @@ func SearchHandler(db *sql.DB, cfg *config.Config) gin.HandlerFunc {
 		}
 
 		// Get organization context
-		org, err := orgRepo.GetDefaultOrganization(c.Request.Context())
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to get organization context",
-			})
-			return
+		var orgID string
+		if cfg.MultiTenancy.Enabled {
+			org, err := orgRepo.GetDefaultOrganization(c.Request.Context())
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Failed to get organization context",
+				})
+				return
+			}
+			if org == nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Default organization not found",
+				})
+				return
+			}
+			orgID = org.ID
 		}
-		if org == nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Default organization not found",
-			})
-			return
-		}
+		// In single-tenant mode, orgID will be empty string which the repository will handle
 
 		// Search modules
 		modules, total, err := moduleRepo.SearchModules(
 			c.Request.Context(),
-			org.ID,
+			orgID,
 			query,
 			namespace,
 			system,
@@ -71,15 +76,31 @@ func SearchHandler(db *sql.DB, cfg *config.Config) gin.HandlerFunc {
 		// Format results
 		results := make([]gin.H, len(modules))
 		for i, m := range modules {
+			// Get latest version for each module
+			versions, _ := moduleRepo.ListVersions(c.Request.Context(), m.ID)
+			var latestVersion string
+			var totalDownloads int64
+			if len(versions) > 0 {
+				latestVersion = versions[0].Version
+				// Sum up downloads across all versions
+				for _, v := range versions {
+					totalDownloads += v.DownloadCount
+				}
+			}
+
 			results[i] = gin.H{
-				"id":          m.ID,
-				"namespace":   m.Namespace,
-				"name":        m.Name,
-				"system":      m.System,
-				"description": m.Description,
-				"source":      m.Source,
-				"created_at":  m.CreatedAt,
-				"updated_at":  m.UpdatedAt,
+				"id":              m.ID,
+				"namespace":       m.Namespace,
+				"name":            m.Name,
+				"system":          m.System,
+				"description":     m.Description,
+				"source":          m.Source,
+				"latest_version":  latestVersion,
+				"download_count":  totalDownloads,
+				"created_by":      m.CreatedBy,
+				"created_by_name": m.CreatedByName,
+				"created_at":      m.CreatedAt,
+				"updated_at":      m.UpdatedAt,
 			}
 		}
 

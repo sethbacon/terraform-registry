@@ -121,6 +121,12 @@ func UploadHandler(db *sql.DB, storageBackend storage.Storage, cfg *config.Confi
 			if source != "" {
 				module.Source = &source
 			}
+			// Set created_by for audit tracking
+			if userID, exists := c.Get("user_id"); exists {
+				if uid, ok := userID.(string); ok {
+					module.CreatedBy = &uid
+				}
+			}
 
 			if err := moduleRepo.CreateModule(c.Request.Context(), module); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{
@@ -176,6 +182,13 @@ func UploadHandler(db *sql.DB, storageBackend storage.Storage, cfg *config.Confi
 			return
 		}
 
+		// Extract README from tarball
+		readme, err := validation.ExtractReadme(bytes.NewReader(fileBuffer.Bytes()))
+		if err != nil {
+			// Log warning but don't fail the upload
+			fmt.Printf("Warning: Failed to extract README: %v\n", err)
+		}
+
 		// Create version record
 		moduleVersion := &models.ModuleVersion{
 			ModuleID:       module.ID,
@@ -184,7 +197,17 @@ func UploadHandler(db *sql.DB, storageBackend storage.Storage, cfg *config.Confi
 			StorageBackend: cfg.Storage.DefaultBackend,
 			SizeBytes:      uploadResult.Size,
 			Checksum:       uploadResult.Checksum,
-			// PublishedBy will be set when auth is implemented in Phase 4
+		}
+		// Set published_by for audit tracking
+		if userID, exists := c.Get("user_id"); exists {
+			if uid, ok := userID.(string); ok {
+				moduleVersion.PublishedBy = &uid
+			}
+		}
+
+		// Set README if extracted
+		if readme != "" {
+			moduleVersion.Readme = &readme
 		}
 
 		if err := moduleRepo.CreateVersion(c.Request.Context(), moduleVersion); err != nil {
@@ -199,15 +222,15 @@ func UploadHandler(db *sql.DB, storageBackend storage.Storage, cfg *config.Confi
 
 		// Return success response with module metadata
 		c.JSON(http.StatusCreated, gin.H{
-			"id":          module.ID,
-			"namespace":   module.Namespace,
-			"name":        module.Name,
-			"system":      module.System,
-			"version":     moduleVersion.Version,
-			"checksum":    moduleVersion.Checksum,
-			"size_bytes":  moduleVersion.SizeBytes,
-			"filename":    header.Filename,
-			"created_at":  moduleVersion.CreatedAt,
+			"id":         module.ID,
+			"namespace":  module.Namespace,
+			"name":       module.Name,
+			"system":     module.System,
+			"version":    moduleVersion.Version,
+			"checksum":   moduleVersion.Checksum,
+			"size_bytes": moduleVersion.SizeBytes,
+			"filename":   header.Filename,
+			"created_at": moduleVersion.CreatedAt,
 		})
 	}
 }

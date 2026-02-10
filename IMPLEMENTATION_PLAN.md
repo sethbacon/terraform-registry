@@ -281,17 +281,33 @@ terraform-registry/
 - ✅ Authentication context with JWT support
 - ✅ Development server running on port 3000
 
-### Phase 5A: VCS Integration for Automated Publishing (Sessions 10-13) ⏳ IN PROGRESS
+### Phase 5A: SCM Integration for Automated Publishing (Sessions 10-13) ✅ COMPLETE
 
 **Objectives:**
 
-- Connect to VCS providers (GitHub, Azure DevOps, GitLab)
-- OAuth 2.0 authentication flow for VCS access
+- Connect to SCM providers (GitHub, Azure DevOps, GitLab)
+- OAuth 2.0 authentication flow for SCM access
 - Repository browsing and selection
 - Commit-pinned immutable versioning for security
 - Tag-triggered automated publishing with commit SHA tracking
 - Webhook handlers for push and tag events
 - Manual sync and branch-based publishing
+
+**Additional Work (Session 13 Debugging):**
+
+- Fixed single-tenant mode organization filtering in search handlers
+- Fixed frontend data visibility issues (modules and providers)
+- Implemented comprehensive upload interface with helper text
+- Added description field to module upload
+- Fixed route parameters in detail pages (provider/system, name/type)
+- Added dashboard navigation to all cards and quick actions
+- Fixed date display with ISO 8601 format for international compatibility
+- Fixed undefined values display (latest_version, download_count)
+- Added upload buttons to modules/providers pages (auth-gated)
+- Backend search now returns computed latest_version and download_count
+- Fixed provider versions response structure handling
+- Added "Network Mirrored" badges for differentiation
+- Fixed TypeScript linting errors across provider pages
 
 **Security Model:**
 
@@ -305,40 +321,44 @@ terraform-registry/
 
 **Database Schema:**
 
-- `backend/internal/db/migrations/008_vcs_integration.sql` - VCS tables:
-  - `vcs_providers` - OAuth client configurations per organization
-  - `vcs_oauth_tokens` - User OAuth tokens (encrypted at rest)
-  - `module_vcs_repos` - Links modules to repositories with webhook config
-  - `vcs_webhook_events` - Webhook delivery log for debugging
+- `backend/internal/db/migrations/008_scm_integration.sql` - SCM tables:
+  - `scm_providers` - OAuth client configurations per organization
+  - `scm_oauth_tokens` - User OAuth tokens (encrypted at rest)
+  - `module_scm_repos` - Links modules to repositories with webhook config
+  - `scm_webhook_events` - Webhook delivery log for debugging
   - `version_immutability_violations` - Track tag movement/tampering
 
-**VCS Provider Abstraction:**
+**SCM Provider Abstraction:**
 
-- `backend/internal/vcs/provider.go` - VCS provider interface
-- `backend/internal/vcs/github/provider.go` - GitHub implementation
-- `backend/internal/vcs/azuredevops/provider.go` - Azure DevOps implementation
-- `backend/internal/vcs/gitlab/provider.go` - GitLab implementation
-- `backend/internal/vcs/factory.go` - Provider factory pattern
-- `backend/internal/vcs/webhook.go` - Webhook signature validation
+- `backend/internal/scm/provider.go` - SCM provider interface
+- `backend/internal/scm/github/provider.go` - GitHub implementation
+- `backend/internal/scm/azuredevops/provider.go` - Azure DevOps implementation
+- `backend/internal/scm/gitlab/provider.go` - GitLab implementation
+- `backend/internal/scm/factory.go` - Provider factory pattern
+- `backend/internal/scm/webhook.go` - Webhook signature validation
 
 **API Endpoints:**
 
-*VCS Provider Management:*
-- `POST /api/v1/vcs-providers` - Create OAuth app configuration
-- `GET /api/v1/vcs-providers` - List configured VCS connections
+*SCM Provider Management:*
+
+- `POST /api/v1/scm-providers` - Create OAuth app configuration
+- `GET /api/v1/scm-providers` - List configured SCM connections
 - OAuth flow and token management endpoints
 
 *Repository Browsing:*
-- `GET /api/v1/vcs-providers/:id/repositories` - List repositories
-- `GET /api/v1/vcs-providers/:id/repositories/:owner/:repo/tags` - List tags with commit SHAs
 
-*Module-VCS Linking:*
-- `POST /api/v1/modules/:id/vcs` - Link module to VCS repository
-- `POST /api/v1/modules/:id/vcs/sync` - Manual sync
-- `GET /api/v1/modules/:id/vcs/events` - Webhook event history
+- `GET /api/v1/scm-providers/:id/repositories` - List repositories
+- `GET /api/v1/scm-providers/:id/repositories/:owner/:repo/tags` - List tags with commit SHAs
+
+*Module-SCM Linking:*
+
+- `POST /api/v1/modules/:id/scm` - Link module to SCM repository
+- `POST /api/v1/modules/:id/scm/sync` - Manual sync
+- `GET /api/v1/modules/:id/scm/events` - Webhook event history
 
 *Webhook Receiver:*
-- `POST /webhooks/vcs/:module_id/:secret` - Receive webhooks from VCS
+
+- `POST /webhooks/scm/:module_id/:secret` - Receive webhooks from SCM
 
 **Publishing Logic:**
 
@@ -350,24 +370,34 @@ terraform-registry/
 
 **Frontend Implementation:**
 
-- `frontend/src/pages/admin/VCSProvidersPage.tsx` - VCS provider management
+- `frontend/src/pages/admin/SCMProvidersPage.tsx` - SCM provider management
 - `frontend/src/components/RepositoryBrowser.tsx` - Repository browser
-- `frontend/src/components/PublishFromVCSWizard.tsx` - Publishing wizard
-- `frontend/src/types/vcs.ts` - VCS TypeScript types
-- Module detail page "VCS" tab with immutability indicators 🔒
+- `frontend/src/components/PublishFromSCMWizard.tsx` - Publishing wizard
+- `frontend/src/types/scm.ts` - SCM TypeScript types
+- Module detail page "SCM" tab with immutability indicators 🔒
 
 **Deliverables:**
 
-- ✅ VCS provider abstraction supporting GitHub, Azure DevOps, GitLab
+- ✅ SCM provider abstraction supporting GitHub, Azure DevOps, GitLab
 - ✅ OAuth 2.0 authentication flow
 - ✅ Commit-pinned immutable versioning preventing supply chain attacks
 - ✅ Tag-triggered automated publishing (tags for UX, commits for security)
 - ✅ Webhook receivers with signature validation
 - ✅ Tag movement detection and alerting
-- ✅ Complete UI for VCS management
+- ✅ Complete UI for SCM management
 - ✅ Immutability indicators in module version display
+- ✅ Fixed single-tenant mode organization filtering
+- ✅ Fixed frontend data visibility and display issues
+- ✅ Comprehensive upload interface with helper text and tab-specific guidelines
+- ✅ Dashboard navigation fully functional
+- ✅ ISO 8601 date formatting for international compatibility
+- ✅ Upload buttons on modules/providers pages (authentication-gated)
+- ✅ Backend search returns computed latest_version and download_count
+- ✅ Network mirrored provider badges
 
-### Phase 5B: Azure DevOps Extension (Sessions 14-16)
+### Phase 5B: Azure DevOps Extension (DEFERRED)
+
+**Status:** Skipped for now - will implement in future if needed
 
 **Objectives:**
 
@@ -376,26 +406,90 @@ terraform-registry/
 - Service connection integration
 - Publish to Visual Studio Marketplace
 
+**Rationale for Deferral:**
+Focus on core registry functionality and provider mirroring capabilities first. Azure DevOps extension can be added later based on user demand.
+
+### Phase 5C: Provider Network Mirroring & Enhanced Security Roles (Sessions 14-16)
+
+**Note:** This phase addresses automated provider mirroring from upstream registries with proper role-based access control.
+
+**Objectives:**
+
+- Automated provider mirroring from upstream registries (registry.terraform.io, etc.)
+- Enhanced security roles and permissions for mirroring operations
+- Granular RBAC for registry operations
+- Audit logging for sensitive operations
+- UI for configuring and triggering provider mirrors
+
 **Key Files:**
 
-- `azure-devops-extension/vss-extension.json` - Extension manifest
-- `azure-devops-extension/task/task.json` - Task definition
-- `azure-devops-extension/task/index.ts` - Task implementation
-- `azure-devops-extension/src/ServiceConnectionDialog.tsx` - Service connection UI
+- `backend/internal/mirror/upstream.go` - Upstream registry client
+- `backend/internal/mirror/sync.go` - Mirror synchronization logic
+- `backend/internal/api/admin/mirror.go` - Mirror management API
+- `backend/internal/jobs/mirror_sync.go` - Background sync jobs
+- `backend/internal/auth/rbac.go` - Enhanced RBAC system
+- `frontend/src/pages/admin/MirrorManagementPage.tsx` - Mirror configuration UI
 
-**Features:**
+**Security Considerations:**
 
-- Custom pipeline task: "Publish to Terraform Registry"
-- OIDC-based authentication using workload identity
-- Service connection type for registry configuration
-- Support for both modules and providers
-- Automatic versioning from git tags
+- **Mirror Administrator Role**: Permission to configure upstream sources and trigger mirroring
+- **Publisher Role**: Permission to manually upload modules/providers
+- **Viewer Role**: Read-only access to browse registry
+- **Organization-level permissions**: Control mirroring at org boundary
+- **Approval workflows**: Optional approval for mirroring specific providers
+- **Mirror policies**: Define allowed upstream registries and namespaces
+
+**Features to Implement:**
+
+1. **Upstream Registry Client**
+   - Discovery protocol implementation for registry.terraform.io
+   - Provider version enumeration
+   - GPG key retrieval and validation
+   - Platform binary downloads with checksums
+
+2. **Mirror Management API**
+   - `POST /api/v1/admin/mirrors` - Create mirror configuration
+   - `GET /api/v1/admin/mirrors` - List mirror configurations
+   - `PUT /api/v1/admin/mirrors/:id` - Update mirror configuration
+   - `DELETE /api/v1/admin/mirrors/:id` - Remove mirror
+   - `POST /api/v1/admin/mirrors/:id/sync` - Trigger manual sync
+   - `GET /api/v1/admin/mirrors/:id/status` - Get sync status and history
+
+3. **Enhanced RBAC System**
+   - Role hierarchy: Admin > Mirror Manager > Publisher > Viewer
+   - Permission model for mirror operations
+   - Organization-scoped permissions
+   - Audit logging for all mirror operations
+
+4. **Background Sync Jobs**
+   - Scheduled periodic sync (configurable interval)
+   - Single-provider sync
+   - Full registry sync
+   - Version-specific sync
+   - Mirror health monitoring
+   - Failure retry logic
+
+5. **Mirror Configuration UI**
+   - Mirror management dashboard
+   - Add/edit/delete mirror sources
+   - Trigger manual sync
+   - View sync history and logs
+   - Configure sync schedules
+   - Mirror status indicators
+
+6. **Provider Verification**
+   - GPG signature verification
+   - Checksum validation
+   - Upstream provider trust policies
+   - Signature key management
 
 **Deliverables:**
 
-- Working Azure DevOps extension
-- Published to VS Marketplace
-- Documentation for setup and usage
+- Working provider mirroring system
+- Enhanced RBAC with mirror-specific roles
+- Admin UI for mirror management
+- Audit logging for mirror operations
+- Documentation for setup and configuration
 
 ### Phase 6: Additional Storage Backends & Deployment (Sessions 17-19)
 
@@ -429,6 +523,16 @@ terraform-registry/
 - Azure Container Apps deployment guide
 - Binary deployment documentation
 - TLS/SSL configuration examples
+
+**Future Enhancement (Storage Manager Role):**
+
+When storage backends are implemented, consider adding a **Storage Manager** role template with dedicated scopes for managing storage operations:
+
+- `storage:read` - View storage configurations and usage statistics
+- `storage:write` - Upload files to storage, manage storage paths
+- `storage:manage` - Configure storage backends, manage quotas, purge/cleanup operations
+
+This role would complement the existing RBAC system and provide granular control over storage operations separately from module/provider publishing permissions. Implementation should be coordinated with the storage backend work in this phase.
 
 ### Phase 7: Documentation & Testing (Sessions 20-22)
 
@@ -701,7 +805,7 @@ GET/POST/DELETE /api/v1/api-keys
 ## Success Criteria
 
 1. ✅ All three Terraform protocols fully implemented
-2. ✅ Multi-backend storage (Azure Blob, S3, local)
+2. ✅ Multi-backend storage (Azure Blob, AWS S3, GCP Storage Bucket, local)
 3. ✅ PostgreSQL with migrations
 4. ✅ Authentication (API keys, Azure AD, OIDC)
 5. ✅ Configurable multi-tenancy
@@ -726,25 +830,236 @@ GET/POST/DELETE /api/v1/api-keys
 - **Session 7** ✅: Authentication & Authorization - Auth infrastructure, OIDC/Azure AD, API keys
 - **Session 8** ✅: User & Organization management - Admin endpoints, RBAC middleware
 - **Session 9** ✅: Frontend SPA - Complete React + TypeScript UI with all pages
-- **Session 10**: Phase 5A - VCS Integration - Database schema, provider abstraction
-- **Session 11**: Phase 5A - VCS Integration - OAuth flows, repository browsing
-- **Session 12**: Phase 5A - VCS Integration - Webhook handlers, immutable publishing
-- **Session 13**: Phase 5A - VCS Integration - Frontend UI, tag movement detection
-- **Session 14**: Phase 5B - Azure DevOps Extension - Begin implementation
-- **Session 15**: Phase 5B - Azure DevOps Extension - Service connection and task implementation
-- **Session 16**: Phase 5B - Azure DevOps Extension - Testing and marketplace publication
-- **Session 17**: Phase 6 - Storage Backends - Azure Blob and S3 implementation
-- **Session 18**: Phase 6 - Deployment Configurations - Docker Compose, Kubernetes, Helm
-- **Session 19**: Phase 6 - Deployment Configurations - Azure Container Apps, binary deployment
-- **Session 20**: Phase 7 - Documentation & Testing - Comprehensive docs
-- **Session 21**: Phase 7 - Documentation & Testing - Unit and integration tests
-- **Session 22**: Phase 7 - Documentation & Testing - E2E tests and security scanning
-- **Session 23**: Phase 8 - Production Polish - Monitoring, observability, performance
-- **Session 24**: Phase 8 - Production Polish - Security hardening, audit logging
-- **Session 25**: Phase 8 - Production Polish - Final testing, deployment checklist
+- **Session 10** ✅: Phase 5A - SCM Integration - Database schema, provider abstraction, encryption utilities
+- **Session 11** ✅: Phase 5A - SCM Integration - OAuth flows, repository browsing (GitHub, Azure DevOps, GitLab) - COMPLETE
+- **Session 12** ✅: Phase 5A - SCM Integration - Webhook handlers, immutable publishing, API endpoints - COMPLETE
+- **Session 13** ✅: Phase 5A - SCM Integration - Frontend UI, repository browsing, publishing wizard, comprehensive debugging
+  - SCM provider management UI, repository browser, publishing wizard
+  - Fixed single-tenant mode organization filtering in search handlers
+  - Fixed frontend data visibility and display issues across all pages
+  - Added description field and helper text to upload forms
+  - Fixed route parameters and navigation throughout application
+  - Implemented ISO 8601 date formatting for international compatibility
+  - Added authentication-gated upload buttons to modules/providers pages
+  - Backend now computes and returns latest_version and download_count in search results
+  - Added network mirrored provider badges for differentiation
+  - Fixed all TypeScript linting errors
+  - **Phase 5A COMPLETE**
+  - **Session 13 (continued)**: README support and detail page redesign
+    - Added README extraction from module tarballs during upload
+    - Database migration 009: Added readme column to module_versions
+    - Backend: README extraction utility, updated upload handler and versions endpoint
+    - Frontend: Installed react-markdown and remark-gfm for proper markdown rendering
+    - Redesigned module and provider detail pages with new layout
+    - Added version selector dropdown in header
+    - Moved module/provider info to right sidebar
+    - Added selected version to breadcrumbs
+    - Added "Publish New Version" button (auth-gated) on module detail page
+    - Upload page now pre-fills data when navigating from module detail
+    - Fixed SHA256 checksum display - show full 64-char hash with copy button
+    - Added database utility tools (clean-db, check-readme-column, check-db)
+- **Session 14** ✅: Phase 5C - Provider Network Mirroring Infrastructure
+  - Database migration 010: mirror_configurations and mirror_sync_history tables
+  - Upstream registry client with Terraform Provider Registry Protocol support
+  - Service discovery, provider version enumeration, package downloads
+  - Mirror configuration models and repository layer
+  - Full CRUD API endpoints for mirror management (/api/v1/admin/mirrors/*)
+  - Background sync job infrastructure with 10-minute interval checks
+  - Sync history tracking and status monitoring
+  - Framework ready for actual provider downloads (to be completed in Session 15)
+  - Fixed migration system: renamed migrations to .up.sql/.down.sql convention
+  - Created fix-migration utility for cleaning dirty migration states
+- **Session 15** ✅: Phase 5C - Provider Network Mirroring - Complete Implementation
+  - Complete syncProvider() implementation with actual provider binary downloads
+  - Downloads provider binaries from upstream registries
+  - Stores binaries in local storage backend
+  - Creates provider, version, and platform records in database
+  - SHA256 checksum verification for all downloads
+  - GPG signature verification using ProtonMail/go-crypto library
+  - Added mirrored provider tracking tables (migration 011)
+    - mirrored_providers: tracks which providers came from which mirror
+    - mirrored_provider_versions: tracks version sync status and verification
+  - Organization support for mirror configurations
+  - Connected TriggerSync API to background sync job
+  - Enhanced RBAC with mirror-specific scopes:
+    - mirrors:read: View mirror configurations and sync status
+    - mirrors:manage: Create, update, delete mirrors and trigger syncs
+  - Audit logging for all mirror operations via middleware
+  - Mirror Management UI page (frontend):
+    - List all mirror configurations with status
+    - Create/edit/delete mirror configurations
+    - Trigger manual sync
+    - View sync status and history
+    - Namespace and provider filters
+    - Navigation in admin sidebar
+  - **Phase 5C COMPLETE**
+- **Session 16** ✅: Phase 6 - Storage Backends - Azure Blob Storage implementation
+  - Created `backend/internal/storage/azure/azure.go` with full Azure Blob Storage support
+  - Implements all Storage interface methods: Upload, Download, Delete, GetURL, Exists, GetMetadata
+  - SAS token generation for secure, time-limited download URLs
+  - SHA256 checksum calculation during uploads
+  - Optional CDN URL support for high-performance downloads
+  - Blob metadata storage for SHA256 checksums (avoids re-downloading for metadata retrieval)
+  - Container creation helper method (EnsureContainer)
+  - Blob access tier management (Hot, Cool, Cold, Archive)
+  - Auto-registers with storage factory via init()
+  - Added Azure SDK dependencies (azure-sdk-for-go/sdk/storage/azblob)
+- **Session 17** ✅: Phase 6 - Storage Backends - AWS S3-compatible storage implementation
+  - Created `backend/internal/storage/s3/s3.go` with full S3-compatible storage support
+  - Supports AWS S3, MinIO, DigitalOcean Spaces, and other S3-compatible services
+  - Custom endpoint support for non-AWS services with path-style addressing
+  - Implements all Storage interface methods: Upload, Download, Delete, GetURL, Exists, GetMetadata
+  - Presigned URL generation for secure, time-limited downloads
+  - SHA256 checksum calculation and storage in object metadata
+  - Bucket creation helper method (EnsureBucket)
+  - Storage class management (STANDARD, GLACIER, DEEP_ARCHIVE, etc.)
+  - ListObjects and DeletePrefix helper methods for bulk operations
+  - Multipart upload support for large files (UploadMultipart)
+  - Auto-registers with storage factory via init()
+  - Added AWS SDK v2 dependencies (aws-sdk-go-v2/service/s3, sts, stscreds)
+  - **Multiple authentication methods supported:**
+    - `default`: AWS default credential chain (env vars, shared config, IAM role, IMDS)
+    - `static`: Explicit access key and secret key
+    - `oidc`: Web Identity/OIDC token (EKS pod identity, GitHub Actions OIDC)
+    - `assume_role`: AssumeRole with optional external ID for cross-account access
+  - Extended S3StorageConfig with auth_method, role_arn, role_session_name, external_id, web_identity_token_file
+- **Session 18** ✅: Phase 6 - Storage Backends - GCS (Google Cloud Storage) implementation
+  - Created `backend/internal/storage/gcs/gcs.go` with full GCS support
+  - Implements all Storage interface methods: Upload, Download, Delete, GetURL, Exists, GetMetadata
+  - Signed URL generation for secure, time-limited downloads
+  - SHA256 checksum calculation and storage in object metadata
+  - Bucket creation helper method (EnsureBucket)
+  - Storage class management (STANDARD, NEARLINE, COLDLINE, ARCHIVE)
+  - ListObjects and DeletePrefix helper methods for bulk operations
+  - ComposeObjects for combining multiple objects (up to 32)
+  - Resumable upload support for large files (UploadResumable with 16MB chunks)
+  - Auto-registers with storage factory via init()
+  - Added Google Cloud Storage SDK dependencies (cloud.google.com/go/storage)
+  - Extended config.go with GCSStorageConfig struct
+  - **Multiple authentication methods supported:**
+    - `default`: Application Default Credentials (ADC) - recommended for GCP-native deployments
+    - `service_account`: Service account key file or JSON credentials
+    - `workload_identity`: Workload Identity Federation (GKE, GitHub Actions, etc.)
+  - Custom endpoint support for GCS emulators or compatible services
+- **Session 19**: Phase 6 - Storage Frontend configuration for storage backends
+  - Created database migration 000026_storage_configuration for storing storage backend config in database
+  - Created system_settings table (singleton pattern) for first-run detection
+  - Created storage_config table with encrypted secrets for Azure, S3, and GCS credentials
+  - Created backend repository (storage_config_repository.go) with CRUD operations
+  - Created backend API handlers (storage.go) with endpoints:
+    - GET /api/v1/setup/status - Check if storage is configured (public, for setup wizard)
+    - GET/POST/PUT/DELETE /api/v1/storage/configs - Storage configuration CRUD (admin only)
+    - POST /api/v1/storage/configs/:id/activate - Activate a configuration
+    - POST /api/v1/storage/configs/test - Test configuration validity
+  - Created frontend StoragePage.tsx with:
+    - Setup wizard (3-step: Select Backend, Configure Settings, Review & Save)
+    - Support for all 4 backends: Local, Azure Blob, S3/S3-compatible, GCS
+    - Dynamic form fields based on backend type and auth method
+    - Guard rails: warns about changing storage after initial setup
+  - Added Storage menu item to admin navigation (admin scope required)
+  - Updated types/index.ts with StorageConfigResponse, StorageConfigInput, SetupStatus types
+  - Updated api.ts with storage configuration API methods
+- **Session 20** ✅: Phase 6 - Deployment Configurations - Docker Compose, Kubernetes, Helm
+  - Created `frontend/Dockerfile` - Multi-stage build (node:20-alpine -> nginx:1.25-alpine)
+  - Created `frontend/nginx.conf` - SPA serving + reverse proxy for API/protocol paths to backend
+  - Created `backend/.dockerignore` and `frontend/.dockerignore` for lean build contexts
+  - Fixed `frontend/vite.config.ts` - Conditional cert loading (skipped during Docker build)
+  - Updated `deployments/docker-compose.yml` - Added frontend service, parameterized passwords, restart policy
+  - Created `deployments/docker-compose.prod.yml` - Production override (no TLS, env_file, resource limits, pre-built images)
+  - Created `deployments/.env.production.example` - Template for all production secrets
+  - Created `deployments/kubernetes/base/` - 12 Kustomize base manifests:
+    - namespace, serviceaccount, configmap, frontend-nginx-configmap, secret, PVC
+    - backend deployment (2 replicas, probes, Prometheus annotations, PVC mount)
+    - frontend deployment (2 replicas, nginx ConfigMap mount)
+    - backend service (ClusterIP, 8080+9090), frontend service (ClusterIP, 80)
+    - ingress (nginx class, TLS termination), PDB (minAvailable: 1)
+  - Created `deployments/kubernetes/overlays/dev/` - 1 replica, debug logging, DEV_MODE true
+  - Created `deployments/kubernetes/overlays/production/` - 3 backend replicas, HPA (3-10), warn logging, 50Gi PVC
+  - Created `deployments/helm/` - Full Helm chart (Chart.yaml, values.yaml, 12 templates):
+    - Configurable: all storage backends, external DB, OIDC/Azure AD auth, ingress, HPA, PDB
+    - Dynamic nginx ConfigMap with templated backend service name
+    - Support for existing secrets, conditional PVC, frontend enable/disable
+    - Config/secret checksum annotations for automatic rollout on changes
+    - NOTES.txt with post-install verification steps and warnings
+  - Verified: `helm lint` passes, `helm template` renders valid manifests, `kustomize build` passes for base and all overlays, frontend Docker image builds successfully
+- **Session 21** ✅: Phase 6 - Deployment Configurations - Cloud PaaS, Binary, Terraform
+  - Created `deployments/azure-container-apps/` - Azure Container Apps deployment:
+    - `main.bicep` - Bicep template: Container Apps Environment, backend (internal ingress, 8080, secrets, probes, 1-10 replicas), frontend (external ingress, 80, 1-5 replicas), Log Analytics
+    - `parameters.json` - Parameter values template for Bicep deployment
+    - `deploy.sh` - CLI deployment script using `az containerapp` commands
+  - Created `deployments/aws-ecs/` - AWS ECS Fargate deployment:
+    - `task-definition-backend.json` - Fargate task: 512 CPU/1024 MiB, ports 8080+9090, Secrets Manager refs, awslogs
+    - `task-definition-frontend.json` - Fargate task: 256 CPU/512 MiB, port 80, awslogs
+    - `cloudformation.yaml` - Full CloudFormation stack: VPC (public/private subnets, NAT), ECS cluster, backend/frontend services, ALB with HTTPS, RDS PostgreSQL, S3 bucket, ECR repos, Secrets Manager, IAM roles, CloudWatch logs, security groups
+    - `deploy.sh` - CLI deployment script using `aws` commands with ECR push
+  - Created `deployments/google-cloud-run/` - Google Cloud Run deployment:
+    - `backend-service.yaml` - Knative service: port 8080, Cloud SQL socket, Secret Manager refs, VPC connector, 1-10 instances, health probes
+    - `frontend-service.yaml` - Knative service: port 80, public ingress, 1-5 instances
+    - `deploy.sh` - CLI deployment script using `gcloud run deploy`, Artifact Registry, service account setup
+  - Created `deployments/binary/` - Standalone binary deployment:
+    - `terraform-registry.service` - Systemd unit: registry user, EnvironmentFile, restart on failure, security hardening (ProtectSystem, NoNewPrivileges, PrivateTmp)
+    - `environment` - Environment file template with all `TFR_*` variables and descriptions
+    - `nginx-registry.conf` - Nginx site config: SPA serving, reverse proxy to backend:8080, Let's Encrypt TLS, HSTS, security headers, gzip, static asset caching
+    - `install.sh` - Installation script: creates user/dirs, copies binary+frontend, installs systemd service, nginx config
+  - Created `deployments/terraform/aws/` - Terraform config for AWS:
+    - `main.tf` - VPC, ECS Fargate cluster+services, ALB with HTTPS, Aurora PostgreSQL, S3 bucket, ECR repos, Secrets Manager, IAM roles, CloudWatch logs
+    - `variables.tf` - Region, domain, instance class, image tag, replica counts, secrets
+    - `outputs.tf` - ALB URL, ECR URIs, RDS endpoint, S3 bucket, VPC ID
+  - Created `deployments/terraform/azure/` - Terraform config for Azure:
+    - `main.tf` - Resource group, Container Apps Environment+apps, PostgreSQL Flexible Server, Storage Account, Key Vault, ACR, Log Analytics
+    - `variables.tf` - Location, resource group, DB SKU, image tag, replica counts, secrets
+    - `outputs.tf` - Frontend URL, backend FQDN, PostgreSQL host, ACR login server, Key Vault URI
+  - Created `deployments/terraform/gcp/` - Terraform config for GCP:
+    - `main.tf` - Cloud Run v2 services, Cloud SQL PostgreSQL, GCS bucket, Secret Manager, Artifact Registry, VPC+connector, service account with IAM bindings
+    - `variables.tf` - Project ID, region, domain, DB tier, image tag, instance counts, secrets
+    - `outputs.tf` - Frontend/backend URLs, Cloud SQL connection, GCS bucket, Artifact Registry URL
+- **Session 22**: Phase 6 - SCM addition - Add Bitbucket Datacenter as an SCM for modules, fixup backend and frontend support
+- **Session 23** ✅: Phase 6 - Storage configuration variables in Terraform deployments
+  - Added `storage_backend` variable (with validation) and ~15 storage-specific variables to all 3 Terraform configs
+  - Each cloud defaults to its native storage (S3 for AWS, Azure Blob for Azure, GCS for GCP) with zero extra config needed
+  - All 4 backends (S3, Azure, GCS, local) available as alternatives in every cloud config
+  - **AWS** (`deployments/terraform/aws/`):
+    - `variables.tf`: Added storage variables with S3 native defaults (IAM role auth)
+    - `main.tf`: `locals` block builds conditional `storage_env` and `storage_secrets` lists; merged into ECS task definition via `concat()`; conditional Secrets Manager resources for non-native storage credentials; IAM execution role includes storage secret ARNs
+  - **Azure** (`deployments/terraform/azure/`):
+    - `variables.tf`: Added storage variables with Azure native defaults
+    - `main.tf`: **Fixed critical bug**: added `TFR_STORAGE_AZURE_ACCOUNT_KEY` as Container App secret (from `azurerm_storage_account.main.primary_access_key`); `dynamic "secret"` and `dynamic "env"` blocks for conditional storage config; separate `storage_secret_env` local for secret-referenced env vars
+  - **GCP** (`deployments/terraform/gcp/`):
+    - `variables.tf`: Added storage variables with GCS native defaults (Workload Identity)
+    - `main.tf`: Added missing `TFR_STORAGE_GCS_AUTH_METHOD` env var; `dynamic "env"` blocks for value-based and secret-referenced storage vars; conditional Secret Manager resources for GCS credentials, S3 keys, Azure account key
+  - All 6 files pass `terraform fmt` and `terraform validate`
+- **Session 24** ✅: Phase 6 - API key frontend: expiration, rotation & edit
+  - Enhanced `frontend/src/pages/admin/APIKeysPage.tsx` with full API key lifecycle management:
+    - **Create dialog**: Added optional expiration date field (`<TextField type="datetime-local">`)
+    - **Table columns**: Added Scopes column (chips with overflow tooltip) and Expires column
+    - **Expiration indicators**: Red "Expired" chip (row dimmed), orange "Expires soon" (within 7 days), formatted date for active, "Never" for no expiration
+    - **Edit dialog**: Update name, scopes (checkboxes), and expiration date for existing keys; calls `PUT /api/v1/apikeys/:id`
+    - **Rotate dialog**: Immediate revocation or grace period (1-72h slider); shows new key value with copy-to-clipboard; calls `POST /api/v1/apikeys/:id/rotate`
+    - Helper functions: `getExpirationStatus()`, `toDatetimeLocalValue()`, reusable `renderScopeCheckboxes()`
+  - Added `rotateAPIKey()` method to `frontend/src/services/api.ts`
+  - Added `RotateAPIKeyResponse` interface to `frontend/src/types/index.ts`
+  - Frontend builds successfully with no compile errors
+- **Session 25**: Phase 7 - Documentation & Testing - Unit and integration tests, evaluate database migrations for consolidation/refactoring
+- **Session 26**: Phase 7 - Documentation & Testing - E2E tests and security scanning
+- **Session 27**: Phase 7 - Documentation & Testing - Comprehensive docs (features, security, configuration, deployment, apis, troubleshooting, contributing, testing), helper text on all frontend input boxes, documentation links on all frontend pages to open context sensitive help (maybe a support icon on the top bar that tracks page context). 
+- **Session 28**: Phase 8 - Production Polish - Security hardening, audit logging, API key expiration email alerts (background job to detect keys expiring within configurable threshold, SMTP/email integration, notification preferences), scan codebase for opensource license attribution violations (are we using any opensource code that we should be correctly attributing based on the code's license and re-use constraints?), license evaluation, based on the type of application we are releasing, is MIT license the best choice? should it be MPL or another opensource license?
+- **Session 29**: Phase 8 - Production Polish - Monitoring, observability, performance, optimization
+- **Session 30**: Phase 8 - Production Polish - Final testing, deployment checklist, github actions for dependabot bi-weekly builds
+- **Session 31**: Phase 8 - Production Polish - Evaluate whether a visual studio marketplace azure devops extension would be useful (formerly Phase 5B)
 
 ---
 
-**Last Updated**: Session 9 - 2024-01-XX
-**Status**: Phase 5 Complete - Frontend SPA fully implemented and running
-**Next Session**: Begin Phase 5A - VCS Integration for Automated Publishing
+**Last Updated**: Session 23 - 2026-02-08
+**Status**: ✅ Session 23 COMPLETE - Storage configuration variables in Terraform deployments
+**Next Session**: Session 22 - SCM addition (Bitbucket Datacenter)
+**Priority**: Phase 6 (Deployment) - SCM integration expansion
+**Deferred**: Phase 5B (Azure DevOps Extension) - Will implement based on future demand
+
+**Note**: After Session 19, to activate the storage configuration UI:
+1. Apply database migration 000026: `migrate -database "postgres://..." -path backend/internal/db/migrations up`
+2. Restart the backend to pick up the new routes
+3. Navigate to Admin > Storage (requires admin scope)
+
+**Known Issues (Resolved)**:
+
+- Database migration 008 (SCM tables) may not have been applied in existing deployments where the Docker image was built before the migration was added. If you encounter "failed to list providers" errors, manually run the migration SQL from `backend/internal/db/migrations/000008_scm_integration.up.sql` against your database.

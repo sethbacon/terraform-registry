@@ -46,20 +46,11 @@ func (h *UserHandlers) ListUsersHandler() gin.HandlerFunc {
 
 		offset := (page - 1) * perPage
 
-		// Get users from repository
-		users, err := h.userRepo.List(c.Request.Context(), perPage, offset)
+		// Get users with role template information
+		users, total, err := h.userRepo.ListUsersWithRoles(c.Request.Context(), perPage, offset)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Failed to list users",
-			})
-			return
-		}
-
-		// Get total count
-		total, err := h.userRepo.Count(c.Request.Context())
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to count users",
 			})
 			return
 		}
@@ -168,6 +159,7 @@ func (h *UserHandlers) CreateUserHandler() gin.HandlerFunc {
 }
 
 // UpdateUserRequest represents the request to update a user
+// Note: Role templates are now assigned per-organization via organization memberships
 type UpdateUserRequest struct {
 	Name  *string `json:"name"`
 	Email *string `json:"email,omitempty"`
@@ -318,6 +310,81 @@ func (h *UserHandlers) SearchUsersHandler() gin.HandlerFunc {
 				"page":     page,
 				"per_page": perPage,
 			},
+		})
+	}
+}
+
+// GetCurrentUserMembershipsHandler retrieves organization memberships for the current authenticated user
+// GET /api/v1/users/me/memberships
+// This endpoint allows any authenticated user to view their own memberships without special scopes
+func (h *UserHandlers) GetCurrentUserMembershipsHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get current user ID from context
+		userIDVal, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "User not authenticated",
+			})
+			return
+		}
+
+		userID, ok := userIDVal.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Invalid user ID format",
+			})
+			return
+		}
+
+		// Get user's memberships
+		memberships, err := h.orgRepo.GetUserMemberships(c.Request.Context(), userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to retrieve user memberships",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"memberships": memberships,
+		})
+	}
+}
+
+// GetUserMembershipsHandler retrieves organization memberships for a user
+// GET /api/v1/users/:id/memberships
+// Requires users:read scope (use /users/me/memberships for self-access)
+func (h *UserHandlers) GetUserMembershipsHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := c.Param("id")
+
+		// Check if user exists
+		user, err := h.userRepo.GetUserByID(c.Request.Context(), userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to retrieve user",
+			})
+			return
+		}
+
+		if user == nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "User not found",
+			})
+			return
+		}
+
+		// Get user's memberships
+		memberships, err := h.orgRepo.GetUserMemberships(c.Request.Context(), userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to retrieve user memberships",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"memberships": memberships,
 		})
 	}
 }

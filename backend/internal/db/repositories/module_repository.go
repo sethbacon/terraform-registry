@@ -21,8 +21,8 @@ func NewModuleRepository(db *sql.DB) *ModuleRepository {
 // CreateModule inserts a new module record
 func (r *ModuleRepository) CreateModule(ctx context.Context, module *models.Module) error {
 	query := `
-		INSERT INTO modules (organization_id, namespace, name, system, description, source)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO modules (organization_id, namespace, name, system, description, source, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, created_at, updated_at
 	`
 
@@ -33,6 +33,7 @@ func (r *ModuleRepository) CreateModule(ctx context.Context, module *models.Modu
 		module.System,
 		module.Description,
 		module.Source,
+		module.CreatedBy,
 	).Scan(&module.ID, &module.CreatedAt, &module.UpdatedAt)
 
 	if err != nil {
@@ -45,9 +46,11 @@ func (r *ModuleRepository) CreateModule(ctx context.Context, module *models.Modu
 // GetModule retrieves a module by organization, namespace, name, and system
 func (r *ModuleRepository) GetModule(ctx context.Context, orgID, namespace, name, system string) (*models.Module, error) {
 	query := `
-		SELECT id, organization_id, namespace, name, system, description, source, created_at, updated_at
-		FROM modules
-		WHERE organization_id = $1 AND namespace = $2 AND name = $3 AND system = $4
+		SELECT m.id, m.organization_id, m.namespace, m.name, m.system, m.description, m.source,
+		       m.created_by, m.created_at, m.updated_at, u.name as created_by_name
+		FROM modules m
+		LEFT JOIN users u ON m.created_by = u.id
+		WHERE m.organization_id = $1 AND m.namespace = $2 AND m.name = $3 AND m.system = $4
 	`
 
 	module := &models.Module{}
@@ -59,8 +62,10 @@ func (r *ModuleRepository) GetModule(ctx context.Context, orgID, namespace, name
 		&module.System,
 		&module.Description,
 		&module.Source,
+		&module.CreatedBy,
 		&module.CreatedAt,
 		&module.UpdatedAt,
+		&module.CreatedByName,
 	)
 
 	if err != nil {
@@ -98,8 +103,8 @@ func (r *ModuleRepository) UpdateModule(ctx context.Context, module *models.Modu
 // CreateVersion inserts a new module version
 func (r *ModuleRepository) CreateVersion(ctx context.Context, version *models.ModuleVersion) error {
 	query := `
-		INSERT INTO module_versions (module_id, version, storage_path, storage_backend, size_bytes, checksum, published_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO module_versions (module_id, version, storage_path, storage_backend, size_bytes, checksum, readme, published_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at
 	`
 
@@ -110,6 +115,7 @@ func (r *ModuleRepository) CreateVersion(ctx context.Context, version *models.Mo
 		version.StorageBackend,
 		version.SizeBytes,
 		version.Checksum,
+		version.Readme,
 		version.PublishedBy,
 	).Scan(&version.ID, &version.CreatedAt)
 
@@ -123,7 +129,8 @@ func (r *ModuleRepository) CreateVersion(ctx context.Context, version *models.Mo
 // GetVersion retrieves a specific module version
 func (r *ModuleRepository) GetVersion(ctx context.Context, moduleID, version string) (*models.ModuleVersion, error) {
 	query := `
-		SELECT id, module_id, version, storage_path, storage_backend, size_bytes, checksum, published_by, download_count, created_at
+		SELECT id, module_id, version, storage_path, storage_backend, size_bytes, checksum, readme, published_by, download_count,
+		       COALESCE(deprecated, false), deprecated_at, deprecation_message, created_at
 		FROM module_versions
 		WHERE module_id = $1 AND version = $2
 	`
@@ -137,8 +144,12 @@ func (r *ModuleRepository) GetVersion(ctx context.Context, moduleID, version str
 		&v.StorageBackend,
 		&v.SizeBytes,
 		&v.Checksum,
+		&v.Readme,
 		&v.PublishedBy,
 		&v.DownloadCount,
+		&v.Deprecated,
+		&v.DeprecatedAt,
+		&v.DeprecationMessage,
 		&v.CreatedAt,
 	)
 
@@ -155,10 +166,13 @@ func (r *ModuleRepository) GetVersion(ctx context.Context, moduleID, version str
 // ListVersions retrieves all versions for a module, ordered by version DESC
 func (r *ModuleRepository) ListVersions(ctx context.Context, moduleID string) ([]*models.ModuleVersion, error) {
 	query := `
-		SELECT id, module_id, version, storage_path, storage_backend, size_bytes, checksum, published_by, download_count, created_at
-		FROM module_versions
-		WHERE module_id = $1
-		ORDER BY created_at DESC
+		SELECT mv.id, mv.module_id, mv.version, mv.storage_path, mv.storage_backend, mv.size_bytes, mv.checksum, mv.readme,
+		       mv.published_by, u.name as published_by_name, mv.download_count,
+		       COALESCE(mv.deprecated, false), mv.deprecated_at, mv.deprecation_message, mv.created_at
+		FROM module_versions mv
+		LEFT JOIN users u ON mv.published_by = u.id
+		WHERE mv.module_id = $1
+		ORDER BY mv.created_at DESC
 	`
 
 	rows, err := r.db.QueryContext(ctx, query, moduleID)
@@ -178,8 +192,13 @@ func (r *ModuleRepository) ListVersions(ctx context.Context, moduleID string) ([
 			&v.StorageBackend,
 			&v.SizeBytes,
 			&v.Checksum,
+			&v.Readme,
 			&v.PublishedBy,
+			&v.PublishedByName,
 			&v.DownloadCount,
+			&v.Deprecated,
+			&v.DeprecatedAt,
+			&v.DeprecationMessage,
 			&v.CreatedAt,
 		)
 		if err != nil {
@@ -214,25 +233,34 @@ func (r *ModuleRepository) IncrementDownloadCount(ctx context.Context, versionID
 // SearchModules searches for modules matching the query
 func (r *ModuleRepository) SearchModules(ctx context.Context, orgID, query, namespace, system string, limit, offset int) ([]*models.Module, int, error) {
 	// Build WHERE clause
-	whereClause := "WHERE organization_id = $1"
-	args := []interface{}{orgID}
-	argCount := 1
+	var whereClause string
+	var args []interface{}
+	argCount := 0
+
+	// Only filter by organization if orgID is provided (multi-tenant mode)
+	if orgID != "" {
+		argCount++
+		whereClause = fmt.Sprintf("WHERE m.organization_id = $%d", argCount)
+		args = append(args, orgID)
+	} else {
+		whereClause = "WHERE 1=1" // No org filter in single-tenant mode
+	}
 
 	if query != "" {
 		argCount++
-		whereClause += fmt.Sprintf(" AND (namespace ILIKE $%d OR name ILIKE $%d OR description ILIKE $%d)", argCount, argCount, argCount)
+		whereClause += fmt.Sprintf(" AND (m.namespace ILIKE $%d OR m.name ILIKE $%d OR m.description ILIKE $%d)", argCount, argCount, argCount)
 		args = append(args, "%"+query+"%")
 	}
 
 	if namespace != "" {
 		argCount++
-		whereClause += fmt.Sprintf(" AND namespace = $%d", argCount)
+		whereClause += fmt.Sprintf(" AND m.namespace = $%d", argCount)
 		args = append(args, namespace)
 	}
 
 	if system != "" {
 		argCount++
-		whereClause += fmt.Sprintf(" AND system = $%d", argCount)
+		whereClause += fmt.Sprintf(" AND m.system = $%d", argCount)
 		args = append(args, system)
 	}
 
@@ -244,12 +272,14 @@ func (r *ModuleRepository) SearchModules(ctx context.Context, orgID, query, name
 		return nil, 0, fmt.Errorf("failed to count modules: %w", err)
 	}
 
-	// Query with pagination
+	// Query with pagination and JOIN for created_by_name
 	query = fmt.Sprintf(`
-		SELECT id, organization_id, namespace, name, system, description, source, created_at, updated_at
-		FROM modules
+		SELECT m.id, m.organization_id, m.namespace, m.name, m.system, m.description, m.source,
+		       m.created_by, u.name as created_by_name, m.created_at, m.updated_at
+		FROM modules m
+		LEFT JOIN users u ON m.created_by = u.id
 		%s
-		ORDER BY created_at DESC
+		ORDER BY m.created_at DESC
 		LIMIT $%d OFFSET $%d
 	`, whereClause, argCount+1, argCount+2)
 
@@ -272,6 +302,8 @@ func (r *ModuleRepository) SearchModules(ctx context.Context, orgID, query, name
 			&m.System,
 			&m.Description,
 			&m.Source,
+			&m.CreatedBy,
+			&m.CreatedByName,
 			&m.CreatedAt,
 			&m.UpdatedAt,
 		)
@@ -316,6 +348,56 @@ func (r *ModuleRepository) DeleteVersion(ctx context.Context, versionID string) 
 	result, err := r.db.ExecContext(ctx, query, versionID)
 	if err != nil {
 		return fmt.Errorf("failed to delete module version: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("module version not found")
+	}
+
+	return nil
+}
+
+// DeprecateVersion marks a module version as deprecated
+func (r *ModuleRepository) DeprecateVersion(ctx context.Context, versionID string, message *string) error {
+	query := `
+		UPDATE module_versions
+		SET deprecated = true, deprecated_at = NOW(), deprecation_message = $2
+		WHERE id = $1
+	`
+
+	result, err := r.db.ExecContext(ctx, query, versionID, message)
+	if err != nil {
+		return fmt.Errorf("failed to deprecate module version: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("module version not found")
+	}
+
+	return nil
+}
+
+// UndeprecateVersion removes the deprecated status from a module version
+func (r *ModuleRepository) UndeprecateVersion(ctx context.Context, versionID string) error {
+	query := `
+		UPDATE module_versions
+		SET deprecated = false, deprecated_at = NULL, deprecation_message = NULL
+		WHERE id = $1
+	`
+
+	result, err := r.db.ExecContext(ctx, query, versionID)
+	if err != nil {
+		return fmt.Errorf("failed to undeprecate module version: %w", err)
 	}
 
 	rows, err := result.RowsAffected()

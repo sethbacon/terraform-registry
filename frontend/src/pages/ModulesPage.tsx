@@ -16,12 +16,14 @@ import {
   Alert,
   Pagination,
 } from '@mui/material';
-import { Search as SearchIcon } from '@mui/icons-material';
+import { Search as SearchIcon, CloudUpload } from '@mui/icons-material';
 import api from '../services/api';
 import { Module } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 const ModulesPage: React.FC = () => {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const [modules, setModules] = useState<Module[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,12 +67,28 @@ const ModulesPage: React.FC = () => {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Typography variant="h4" gutterBottom>
-        Terraform Modules
-      </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-        Browse and discover Terraform modules in your organization
-      </Typography>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Box>
+          <Typography variant="h4" gutterBottom>
+            Terraform Modules
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Browse and discover Terraform modules in your organization
+          </Typography>
+        </Box>
+        {isAuthenticated && (
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<CloudUpload />}
+            onClick={() => navigate('/admin/upload', { state: { tab: 0 } })}
+          >
+            Upload Module
+          </Button>
+        )}
+      </Box>
+      <Box sx={{ mb: 4 }} />
 
       {/* Search Bar */}
       <TextField
@@ -156,13 +174,13 @@ const ModulesPage: React.FC = () => {
                     </Typography>
                     <Box sx={{ mt: 'auto' }}>
                       <Chip
-                        label={`Latest: ${module.latest_version}`}
+                        label={`Latest: ${module.latest_version || 'N/A'}`}
                         size="small"
                         color="primary"
                         variant="outlined"
                       />
                       <Chip
-                        label={`${module.download_count} downloads`}
+                        label={`${module.download_count ?? 0} downloads`}
                         size="small"
                         sx={{ ml: 1 }}
                       />

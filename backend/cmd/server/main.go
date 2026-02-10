@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/terraform-registry/terraform-registry/internal/api"
+	"github.com/terraform-registry/terraform-registry/internal/auth"
 	"github.com/terraform-registry/terraform-registry/internal/config"
 	"github.com/terraform-registry/terraform-registry/internal/db"
 )
@@ -64,6 +65,12 @@ func serve(cfg *config.Config) error {
 	} else {
 		gin.SetMode(gin.ReleaseMode)
 	}
+
+	// Validate JWT secret configuration (fails in production if not set)
+	if err := auth.ValidateJWTSecret(); err != nil {
+		return fmt.Errorf("security configuration error: %w", err)
+	}
+	log.Println("JWT secret validated successfully")
 
 	// Debug: Print database configuration (mask password)
 	maskedPassword := "****"

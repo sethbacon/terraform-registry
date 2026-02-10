@@ -14,7 +14,7 @@ import (
 )
 
 // AuthMiddleware validates authentication (JWT or API key)
-func AuthMiddleware(cfg *config.Config, userRepo *repositories.UserRepository, apiKeyRepo *repositories.APIKeyRepository) gin.HandlerFunc {
+func AuthMiddleware(cfg *config.Config, userRepo *repositories.UserRepository, apiKeyRepo *repositories.APIKeyRepository, orgRepo *repositories.OrganizationRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Check for Authorization header
 		authHeader := c.GetHeader("Authorization")
@@ -67,9 +67,13 @@ func AuthMiddleware(cfg *config.Config, userRepo *repositories.UserRepository, a
 			c.Set("user_id", user.ID)
 			c.Set("auth_method", "jwt")
 
-			// For JWT users, we'll need to get their organization memberships for scopes
-			// For now, give them admin scope (TODO: implement proper scope management from user roles)
-			c.Set("scopes", auth.GetAdminScopes())
+			// Get user's combined scopes from all organization memberships
+			scopes, err := orgRepo.GetUserCombinedScopes(c.Request.Context(), user.ID)
+			if err != nil {
+				// Log error but don't fail - user just gets empty scopes
+				scopes = []string{}
+			}
+			c.Set("scopes", scopes)
 
 			c.Next()
 			return
@@ -142,7 +146,7 @@ func AuthMiddleware(cfg *config.Config, userRepo *repositories.UserRepository, a
 }
 
 // OptionalAuthMiddleware - same as AuthMiddleware but doesn't abort if no auth
-func OptionalAuthMiddleware(cfg *config.Config, userRepo *repositories.UserRepository, apiKeyRepo *repositories.APIKeyRepository) gin.HandlerFunc {
+func OptionalAuthMiddleware(cfg *config.Config, userRepo *repositories.UserRepository, apiKeyRepo *repositories.APIKeyRepository, orgRepo *repositories.OrganizationRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Check for Authorization header
 		authHeader := c.GetHeader("Authorization")
@@ -177,7 +181,9 @@ func OptionalAuthMiddleware(cfg *config.Config, userRepo *repositories.UserRepos
 				c.Set("user", user)
 				c.Set("user_id", user.ID)
 				c.Set("auth_method", "jwt")
-				c.Set("scopes", auth.GetAdminScopes())
+				// Get user's combined scopes from all organization memberships
+				scopes, _ := orgRepo.GetUserCombinedScopes(c.Request.Context(), user.ID)
+				c.Set("scopes", scopes)
 			}
 			c.Next()
 			return
