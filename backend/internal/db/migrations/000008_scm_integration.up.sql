@@ -1,5 +1,3 @@
--- +migrate Up
-
 -- SCM provider configurations per organization
 CREATE TABLE scm_providers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -117,19 +115,3 @@ CREATE INDEX idx_module_versions_commit_sha ON module_versions(commit_sha);
 CREATE INDEX idx_module_versions_tag_name ON module_versions(tag_name);
 CREATE INDEX idx_module_versions_scm_repo ON module_versions(scm_repo_id);
 
--- +migrate Down
-
-DROP INDEX IF EXISTS idx_module_versions_scm_repo;
-DROP INDEX IF EXISTS idx_module_versions_tag_name;
-DROP INDEX IF EXISTS idx_module_versions_commit_sha;
-
-ALTER TABLE module_versions DROP COLUMN IF EXISTS scm_repo_id;
-ALTER TABLE module_versions DROP COLUMN IF EXISTS tag_name;
-ALTER TABLE module_versions DROP COLUMN IF EXISTS scm_source;
-ALTER TABLE module_versions DROP COLUMN IF EXISTS commit_sha;
-
-DROP TABLE IF EXISTS version_immutability_violations;
-DROP TABLE IF EXISTS scm_webhook_events;
-DROP TABLE IF EXISTS module_scm_repos;
-DROP TABLE IF EXISTS scm_oauth_tokens;
-DROP TABLE IF EXISTS scm_providers;

@@ -1,5 +1,3 @@
--- +migrate Down
-
 -- Remove bitbucket_dc providers and their tokens
 DELETE FROM scm_oauth_tokens WHERE scm_provider_id IN (SELECT id FROM scm_providers WHERE provider_type = 'bitbucket_dc');
 DELETE FROM scm_providers WHERE provider_type = 'bitbucket_dc';
