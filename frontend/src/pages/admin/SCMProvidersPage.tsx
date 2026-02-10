@@ -21,6 +21,7 @@ import {
   Alert,
   CircularProgress,
   Tooltip,
+  Divider,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -30,12 +31,27 @@ import {
   Refresh as RefreshIcon,
   GitHub as GitHubIcon,
   Cloud as CloudIcon,
+  ContentCopy as ContentCopyIcon,
+  CheckCircle as CheckCircleIcon,
+  LinkOff as LinkOffIcon,
 } from '@mui/icons-material';
 import { apiClient } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import type { SCMProvider, SCMProviderType, CreateSCMProviderRequest } from '../../types/scm';
+import type { UserMembership } from '../../types';
+
+interface TokenStatus {
+  connected: boolean;
+  connected_at?: string;
+  expires_at?: string | null;
+  token_type?: string;
+}
 
 const SCMProvidersPage: React.FC = () => {
+  const { user } = useAuth();
   const [providers, setProviders] = useState<SCMProvider[]>([]);
+  const [memberships, setMemberships] = useState<UserMembership[]>([]);
+  const [tokenStatuses, setTokenStatuses] = useState<Record<string, TokenStatus>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -47,10 +63,11 @@ const SCMProvidersPage: React.FC = () => {
   const [patProvider, setPatProvider] = useState<SCMProvider | null>(null);
 
   const [formData, setFormData] = useState<Partial<CreateSCMProviderRequest>>({
-    organization_id: '00000000-0000-0000-0000-000000000000', // Default org
+    organization_id: undefined,
     provider_type: 'github',
     name: '',
     base_url: null,
+    tenant_id: null,
     client_id: '',
     client_secret: '',
     webhook_secret: '',
@@ -58,14 +75,47 @@ const SCMProvidersPage: React.FC = () => {
 
   useEffect(() => {
     loadProviders();
+    loadMemberships();
   }, []);
+
+  const loadMemberships = async () => {
+    try {
+      if (user?.id) {
+        const data = await apiClient.getCurrentUserMemberships();
+        setMemberships(data || []);
+        // Set first organization as default if available
+        if (data && data.length > 0 && !formData.organization_id) {
+          setFormData(prev => ({
+            ...prev,
+            organization_id: data[0].organization_id,
+          }));
+        }
+      }
+    } catch (err: any) {
+      console.error('Error loading memberships:', err);
+    }
+  };
 
   const loadProviders = async () => {
     try {
       setLoading(true);
       setError(null);
       const data = await apiClient.listSCMProviders();
-      setProviders(Array.isArray(data) ? data : []);
+      const providerList = Array.isArray(data) ? data : [];
+      setProviders(providerList);
+
+      // Fetch token status for each provider in parallel
+      const statusEntries = await Promise.allSettled(
+        providerList.map((p) => apiClient.getSCMTokenStatus(p.id).then((s) => [p.id, s] as const))
+      );
+      const statuses: Record<string, TokenStatus> = {};
+      statusEntries.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          const [id, status] = result.value;
+          statuses[id] = status;
+        }
+      });
+      setTokenStatuses(statuses);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load SCM providers');
       console.error('Error loading providers:', err);
@@ -93,6 +143,7 @@ const SCMProvidersPage: React.FC = () => {
       await apiClient.updateSCMProvider(editingProvider.id, {
         name: formData.name,
         base_url: formData.base_url,
+        tenant_id: formData.tenant_id,
         client_id: formData.client_id,
         client_secret: formData.client_secret,
         webhook_secret: formData.webhook_secret,
@@ -148,12 +199,22 @@ const SCMProvidersPage: React.FC = () => {
 
   const isPATProvider = (type?: SCMProviderType) => type === 'bitbucket_dc';
 
+  const getCallbackUrl = (providerId: string): string => {
+    const baseUrl = window.location.origin;
+    return `${baseUrl}/api/v1/scm-providers/${providerId}/oauth/callback`;
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
+
   const resetForm = () => {
     setFormData({
-      organization_id: '00000000-0000-0000-0000-000000000000',
+      organization_id: undefined,
       provider_type: 'github',
       name: '',
       base_url: null,
+      tenant_id: null,
       client_id: '',
       client_secret: '',
       webhook_secret: '',
@@ -165,6 +226,7 @@ const SCMProvidersPage: React.FC = () => {
     setFormData({
       name: provider.name,
       base_url: provider.base_url,
+      tenant_id: provider.tenant_id,
       client_id: provider.client_id,
       client_secret: '', // Don't show existing secret
       webhook_secret: provider.webhook_secret || '',
@@ -175,7 +237,7 @@ const SCMProvidersPage: React.FC = () => {
     switch (type) {
       case 'github':
         return <GitHubIcon />;
-      case 'azure_devops':
+      case 'azuredevops':
         return <CloudIcon />;
       case 'gitlab':
         return <CloudIcon />;
@@ -190,7 +252,7 @@ const SCMProvidersPage: React.FC = () => {
     switch (type) {
       case 'github':
         return 'GitHub';
-      case 'azure_devops':
+      case 'azuredevops':
         return 'Azure DevOps';
       case 'gitlab':
         return 'GitLab';
@@ -205,7 +267,7 @@ const SCMProvidersPage: React.FC = () => {
     switch (type) {
       case 'github':
         return 'Client ID';
-      case 'azure_devops':
+      case 'azuredevops':
         return 'App ID';
       case 'gitlab':
         return 'Application ID';
@@ -218,7 +280,7 @@ const SCMProvidersPage: React.FC = () => {
     switch (type) {
       case 'github':
         return 'Client Secret';
-      case 'azure_devops':
+      case 'azuredevops':
         return 'Client Secret';
       case 'gitlab':
         return 'Secret';
@@ -231,7 +293,7 @@ const SCMProvidersPage: React.FC = () => {
     switch (type) {
       case 'github':
         return 'For GitHub Enterprise: https://github.company.com';
-      case 'azure_devops':
+      case 'azuredevops':
         return 'For Azure DevOps Server: https://dev.azure.com/organization';
       case 'gitlab':
         return 'For self-hosted GitLab: https://gitlab.company.com';
@@ -302,8 +364,14 @@ const SCMProvidersPage: React.FC = () => {
                   />
                 </Box>
 
+                {provider.tenant_id && (
+                  <Typography variant="body2" color="textSecondary" gutterBottom>
+                    Tenant ID: {provider.tenant_id}
+                  </Typography>
+                )}
+
                 <Typography variant="body2" color="textSecondary" gutterBottom>
-                  Client ID: {provider.client_id}
+                  {getClientIdLabel(provider.provider_type)}: {provider.client_id}
                 </Typography>
 
                 {provider.base_url && (
@@ -312,13 +380,101 @@ const SCMProvidersPage: React.FC = () => {
                   </Typography>
                 )}
 
-                <Typography variant="caption" color="textSecondary" display="block" mt={1}>
-                  Created: {new Date(provider.created_at).toLocaleDateString()}
-                </Typography>
+                {provider.provider_type !== 'bitbucket_dc' && (
+                  <Box
+                    mt={2}
+                    p={1.5}
+                    sx={{
+                      backgroundColor: (theme) =>
+                        theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
+                      borderRadius: 1,
+                      border: (theme) =>
+                        `1px solid ${theme.palette.mode === 'dark' ? '#404040' : '#e0e0e0'}`,
+                    }}
+                  >
+                    <Typography variant="caption" color="textSecondary" display="block" mb={0.5}>
+                      OAuth Callback URL:
+                    </Typography>
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontFamily: 'monospace',
+                          fontSize: '0.75rem',
+                          wordBreak: 'break-all',
+                          flex: 1,
+                          color: (theme) =>
+                            theme.palette.mode === 'dark'
+                              ? theme.palette.primary.light
+                              : theme.palette.primary.main,
+                        }}
+                      >
+                        {getCallbackUrl(provider.id)}
+                      </Typography>
+                      <Tooltip title="Copy to clipboard">
+                        <IconButton
+                          size="small"
+                          onClick={() => copyToClipboard(getCallbackUrl(provider.id))}
+                          sx={{ flexShrink: 0 }}
+                        >
+                          <ContentCopyIcon sx={{ fontSize: '1rem' }} />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </Box>
+                )}
+
+                <Divider sx={{ my: 1.5 }} />
+
+                <Box display="flex" alignItems="flex-start" gap={1}>
+                  <Box flex={1}>
+                    <Typography variant="caption" color="textSecondary" display="block">
+                      Created: {new Date(provider.created_at).toLocaleDateString()}
+                    </Typography>
+                    {(() => {
+                      const status = tokenStatuses[provider.id];
+                      if (!status) return null;
+                      return status.connected ? (
+                        <Box display="flex" alignItems="center" gap={0.5} mt={0.5}>
+                          <CheckCircleIcon sx={{ fontSize: '0.9rem', color: 'success.main' }} />
+                          <Box>
+                            <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 600, lineHeight: 1.2, display: 'block' }}>
+                              Connected
+                            </Typography>
+                            {status.connected_at && (
+                              <Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.7rem', display: 'block' }}>
+                                {new Date(status.connected_at).toLocaleString()}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Box>
+                      ) : (
+                        <Box display="flex" alignItems="center" gap={0.5} mt={0.5}>
+                          <LinkOffIcon sx={{ fontSize: '0.9rem', color: 'text.disabled' }} />
+                          <Typography variant="caption" color="textDisabled" sx={{ fontStyle: 'italic' }}>
+                            Not connected
+                          </Typography>
+                        </Box>
+                      );
+                    })()}
+                  </Box>
+                  {tokenStatuses[provider.id]?.connected && (
+                    <Chip
+                      label={tokenStatuses[provider.id]?.token_type === 'pat' ? 'PAT' : 'OAuth'}
+                      size="small"
+                      variant="outlined"
+                      color="success"
+                      sx={{ fontSize: '0.65rem', height: 20 }}
+                    />
+                  )}
+                </Box>
               </CardContent>
 
               <CardActions>
-                <Tooltip title={provider.provider_type === 'bitbucket_dc' ? 'Connect PAT' : 'Connect OAuth'}>
+                <Tooltip title={tokenStatuses[provider.id]?.connected
+                  ? (provider.provider_type === 'bitbucket_dc' ? 'Update PAT' : 'Reconnect OAuth')
+                  : (provider.provider_type === 'bitbucket_dc' ? 'Connect PAT' : 'Connect OAuth')
+                }>
                   <IconButton
                     size="small"
                     color="primary"
@@ -327,6 +483,24 @@ const SCMProvidersPage: React.FC = () => {
                     <LinkIcon />
                   </IconButton>
                 </Tooltip>
+                {tokenStatuses[provider.id]?.connected && (
+                  <Tooltip title="Disconnect">
+                    <IconButton
+                      size="small"
+                      color="warning"
+                      onClick={async () => {
+                        try {
+                          await apiClient.revokeSCMToken(provider.id);
+                          await loadProviders();
+                        } catch (err: any) {
+                          setError(err.response?.data?.error || 'Failed to disconnect');
+                        }
+                      }}
+                    >
+                      <LinkOffIcon />
+                    </IconButton>
+                  </Tooltip>
+                )}
                 <Tooltip title="Edit">
                   <IconButton
                     size="small"
@@ -379,6 +553,26 @@ const SCMProvidersPage: React.FC = () => {
         <DialogTitle>{editingProvider ? 'Edit Provider' : 'Add SCM Provider'}</DialogTitle>
         <DialogContent>
           <Box sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {memberships.length > 1 && !editingProvider && (
+              <FormControl fullWidth>
+                <InputLabel id="organization-label">Organization</InputLabel>
+                <Select
+                  labelId="organization-label"
+                  value={formData.organization_id || ''}
+                  label="Organization"
+                  onChange={(e) =>
+                    setFormData({ ...formData, organization_id: e.target.value as string })
+                  }
+                >
+                  {memberships.map((membership) => (
+                    <MenuItem key={membership.organization_id} value={membership.organization_id}>
+                      {membership.organization_name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+
             {!editingProvider && (
               <FormControl fullWidth>
                 <InputLabel id="provider-type-label">Provider Type</InputLabel>
@@ -391,7 +585,7 @@ const SCMProvidersPage: React.FC = () => {
                   }
                 >
                   <MenuItem value="github">GitHub</MenuItem>
-                  <MenuItem value="azure_devops">Azure DevOps</MenuItem>
+                  <MenuItem value="azuredevops">Azure DevOps</MenuItem>
                   <MenuItem value="gitlab">GitLab</MenuItem>
                   <MenuItem value="bitbucket_dc">Bitbucket Data Center</MenuItem>
                 </Select>
@@ -405,6 +599,17 @@ const SCMProvidersPage: React.FC = () => {
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               required
             />
+
+            {(editingProvider?.provider_type || formData.provider_type) === 'azuredevops' && (
+              <TextField
+                label="Tenant ID"
+                fullWidth
+                value={formData.tenant_id || ''}
+                onChange={(e) => setFormData({ ...formData, tenant_id: e.target.value || null })}
+                required
+                helperText="Your Azure AD / Entra Tenant ID (found in Azure Portal → Azure Active Directory → Overview)"
+              />
+            )}
 
             {!isPATProvider(editingProvider?.provider_type || formData.provider_type) && (
               <>
@@ -444,7 +649,7 @@ const SCMProvidersPage: React.FC = () => {
               fullWidth
               value={formData.webhook_secret}
               onChange={(e) => setFormData({ ...formData, webhook_secret: e.target.value })}
-              helperText="Used to validate webhook signatures"
+              helperText="Used to validate webhook signatures from your SCM system. Can be added later."
             />
           </Box>
         </DialogContent>
@@ -461,7 +666,7 @@ const SCMProvidersPage: React.FC = () => {
           <Button
             variant="contained"
             onClick={editingProvider ? handleUpdate : handleCreate}
-            disabled={!formData.name || (!isPATProvider(formData.provider_type) && !formData.client_id) || (isPATProvider(formData.provider_type) && !formData.base_url)}
+            disabled={!formData.name || (!isPATProvider(formData.provider_type) && (!formData.client_id || !formData.client_secret)) || (isPATProvider(formData.provider_type) && !formData.base_url)}
           >
             {editingProvider ? 'Update' : 'Create'}
           </Button>

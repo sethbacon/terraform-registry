@@ -130,6 +130,7 @@ terraform.tfstate.backup
 testdata/output/
 test-providers*
 test-modules*
+test-terraform*
 
 # Documentation build
 docs/_build/

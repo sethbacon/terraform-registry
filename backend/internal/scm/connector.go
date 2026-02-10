@@ -107,6 +107,7 @@ type ConnectorSettings struct {
 	ClientID        string
 	ClientSecret    string
 	CallbackURL     string
+	TenantID        string // Required for Azure DevOps with Microsoft Entra ID OAuth
 }
 
 // Validate checks if the settings are complete

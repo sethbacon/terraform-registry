@@ -27,16 +27,16 @@ func NewSCMRepository(db *sqlx.DB) *SCMRepository {
 func (r *SCMRepository) CreateProvider(ctx context.Context, provider *scm.SCMProviderRecord) error {
 	query := `
 		INSERT INTO scm_providers (
-			id, organization_id, provider_type, name, base_url,
+			id, organization_id, provider_type, name, base_url, tenant_id,
 			client_id, client_secret_encrypted, webhook_secret,
 			is_active, created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 		)`
 
 	_, err := r.db.ExecContext(ctx, query,
 		provider.ID, provider.OrganizationID, provider.ProviderType, provider.Name,
-		provider.BaseURL, provider.ClientID, provider.ClientSecretEncrypted,
+		provider.BaseURL, provider.TenantID, provider.ClientID, provider.ClientSecretEncrypted,
 		provider.WebhookSecret, provider.IsActive, provider.CreatedAt, provider.UpdatedAt,
 	)
 	return err
@@ -75,13 +75,13 @@ func (r *SCMRepository) ListProviders(ctx context.Context, orgID uuid.UUID) ([]*
 func (r *SCMRepository) UpdateProvider(ctx context.Context, provider *scm.SCMProviderRecord) error {
 	query := `
 		UPDATE scm_providers SET
-			name = $2, base_url = $3, client_id = $4,
-			client_secret_encrypted = $5, webhook_secret = $6,
-			is_active = $7, updated_at = $8
+			name = $2, base_url = $3, tenant_id = $4, client_id = $5,
+			client_secret_encrypted = $6, webhook_secret = $7,
+			is_active = $8, updated_at = $9
 		WHERE id = $1`
 
 	_, err := r.db.ExecContext(ctx, query,
-		provider.ID, provider.Name, provider.BaseURL, provider.ClientID,
+		provider.ID, provider.Name, provider.BaseURL, provider.TenantID, provider.ClientID,
 		provider.ClientSecretEncrypted, provider.WebhookSecret,
 		provider.IsActive, time.Now(),
 	)

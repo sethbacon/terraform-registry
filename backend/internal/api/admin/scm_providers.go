@@ -29,18 +29,20 @@ func NewSCMProviderHandlers(cfg *config.Config, scmRepo *repositories.SCMReposit
 }
 
 type CreateSCMProviderRequest struct {
-	OrganizationID uuid.UUID        `json:"organization_id" binding:"required"`
+	OrganizationID *uuid.UUID       `json:"organization_id,omitempty"`
 	ProviderType   scm.ProviderType `json:"provider_type" binding:"required"`
 	Name           string           `json:"name" binding:"required"`
 	BaseURL        *string          `json:"base_url,omitempty"`
+	TenantID       *string          `json:"tenant_id,omitempty"`
 	ClientID       string           `json:"client_id"`
 	ClientSecret   string           `json:"client_secret"`
-	WebhookSecret  string           `json:"webhook_secret" binding:"required"`
+	WebhookSecret  string           `json:"webhook_secret,omitempty"`
 }
 
 type UpdateSCMProviderRequest struct {
 	Name          *string `json:"name,omitempty"`
 	BaseURL       *string `json:"base_url,omitempty"`
+	TenantID      *string `json:"tenant_id,omitempty"`
 	ClientID      *string `json:"client_id,omitempty"`
 	ClientSecret  *string `json:"client_secret,omitempty"`
 	WebhookSecret *string `json:"webhook_secret,omitempty"`
@@ -92,12 +94,19 @@ func (h *SCMProviderHandlers) CreateProvider(c *gin.Context) {
 		return
 	}
 
+	// Get organization ID - use provided org or default to nil (will use default org)
+	orgID := uuid.Nil
+	if req.OrganizationID != nil && req.OrganizationID.String() != "00000000-0000-0000-0000-000000000000" {
+		orgID = *req.OrganizationID
+	}
+
 	provider := &scm.SCMProviderRecord{
 		ID:                    uuid.New(),
-		OrganizationID:        req.OrganizationID,
+		OrganizationID:        orgID,
 		ProviderType:          req.ProviderType,
 		Name:                  req.Name,
 		BaseURL:               req.BaseURL,
+		TenantID:              req.TenantID,
 		ClientID:              req.ClientID,
 		ClientSecretEncrypted: clientSecretEncrypted,
 		WebhookSecret:         req.WebhookSecret,
@@ -199,6 +208,9 @@ func (h *SCMProviderHandlers) UpdateProvider(c *gin.Context) {
 	}
 	if req.BaseURL != nil {
 		provider.BaseURL = req.BaseURL
+	}
+	if req.TenantID != nil {
+		provider.TenantID = req.TenantID
 	}
 	if req.ClientID != nil {
 		provider.ClientID = *req.ClientID

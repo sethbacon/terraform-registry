@@ -1,6 +1,6 @@
 // SCM Integration Types
 
-export type SCMProviderType = 'github' | 'azure_devops' | 'gitlab' | 'bitbucket_dc';
+export type SCMProviderType = 'github' | 'azuredevops' | 'gitlab' | 'bitbucket_dc';
 
 export interface SCMProvider {
   id: string;
@@ -8,6 +8,7 @@ export interface SCMProvider {
   provider_type: SCMProviderType;
   name: string;
   base_url?: string | null;
+  tenant_id?: string | null;
   client_id: string;
   webhook_secret?: string;
   is_active: boolean;
@@ -20,6 +21,7 @@ export interface CreateSCMProviderRequest {
   provider_type: SCMProviderType;
   name: string;
   base_url?: string | null;
+  tenant_id?: string | null;
   client_id?: string;
   client_secret?: string;
   webhook_secret?: string;
@@ -28,6 +30,7 @@ export interface CreateSCMProviderRequest {
 export interface UpdateSCMProviderRequest {
   name?: string;
   base_url?: string | null;
+  tenant_id?: string | null;
   client_id?: string;
   client_secret?: string;
   webhook_secret?: string;

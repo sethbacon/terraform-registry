@@ -15,16 +15,20 @@ import (
 
 const (
 	defaultAzureDevOpsURL = "https://dev.azure.com"
-	azureAuthURL          = "https://app.vssps.visualstudio.com/oauth2/authorize"
-	azureTokenURL         = "https://app.vssps.visualstudio.com/oauth2/token"
+	// Azure DevOps resource ID for Entra ID OAuth scopes
+	azureDevOpsResourceID = "499b84ac-1321-427f-aa17-267ca6975798"
+	// Entra ID OAuth 2.0 endpoints (tenant-specific URLs built at runtime)
+	entraAuthURLTemplate  = "https://login.microsoftonline.com/%s/oauth2/v2.0/authorize"
+	entraTokenURLTemplate = "https://login.microsoftonline.com/%s/oauth2/v2.0/token"
 )
 
-// AzureDevOpsConnector implements scm.Connector for Azure DevOps
+// AzureDevOpsConnector implements scm.Connector for Azure DevOps using Microsoft Entra ID OAuth
 type AzureDevOpsConnector struct {
 	clientID     string
 	clientSecret string
 	callbackURL  string
 	baseURL      string
+	tenantID     string
 	organization string
 }
 
@@ -40,6 +44,7 @@ func NewAzureDevOpsConnector(settings *scm.ConnectorSettings) (*AzureDevOpsConne
 		clientSecret: settings.ClientSecret,
 		callbackURL:  settings.CallbackURL,
 		baseURL:      baseURL,
+		tenantID:     settings.TenantID,
 	}, nil
 }
 
@@ -48,30 +53,33 @@ func (c *AzureDevOpsConnector) Platform() scm.ProviderKind {
 }
 
 func (c *AzureDevOpsConnector) AuthorizationEndpoint(stateParam string, requestedScopes []string) string {
-	scopes := "vso.code vso.project"
+	// Use .default to request all Azure DevOps permissions granted to the app registration
+	scope := azureDevOpsResourceID + "/.default"
 	if len(requestedScopes) > 0 {
-		scopes = strings.Join(requestedScopes, " ")
+		scope = strings.Join(requestedScopes, " ")
 	}
 
 	params := url.Values{}
 	params.Set("client_id", c.clientID)
-	params.Set("response_type", "Assertion")
-	params.Set("state", stateParam)
-	params.Set("scope", scopes)
+	params.Set("response_type", "code")
 	params.Set("redirect_uri", c.callbackURL)
+	params.Set("scope", scope)
+	params.Set("state", stateParam)
 
-	return fmt.Sprintf("%s?%s", azureAuthURL, params.Encode())
+	authURL := fmt.Sprintf(entraAuthURLTemplate, c.tenantID)
+	return fmt.Sprintf("%s?%s", authURL, params.Encode())
 }
 
 func (c *AzureDevOpsConnector) CompleteAuthorization(ctx context.Context, authCode string) (*scm.AccessToken, error) {
 	data := url.Values{}
-	data.Set("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-bearer")
-	data.Set("client_assertion", c.clientSecret)
-	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
-	data.Set("assertion", authCode)
+	data.Set("grant_type", "authorization_code")
+	data.Set("code", authCode)
 	data.Set("redirect_uri", c.callbackURL)
+	data.Set("client_id", c.clientID)
+	data.Set("client_secret", c.clientSecret)
 
-	req, err := http.NewRequestWithContext(ctx, "POST", azureTokenURL, strings.NewReader(data.Encode()))
+	tokenURL := fmt.Sprintf(entraTokenURLTemplate, c.tenantID)
+	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, err
 	}
@@ -117,13 +125,13 @@ func (c *AzureDevOpsConnector) CompleteAuthorization(ctx context.Context, authCo
 
 func (c *AzureDevOpsConnector) RenewToken(ctx context.Context, refreshToken string) (*scm.AccessToken, error) {
 	data := url.Values{}
-	data.Set("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-bearer")
-	data.Set("client_assertion", c.clientSecret)
 	data.Set("grant_type", "refresh_token")
-	data.Set("assertion", refreshToken)
-	data.Set("redirect_uri", c.callbackURL)
+	data.Set("refresh_token", refreshToken)
+	data.Set("client_id", c.clientID)
+	data.Set("client_secret", c.clientSecret)
 
-	req, err := http.NewRequestWithContext(ctx, "POST", azureTokenURL, strings.NewReader(data.Encode()))
+	tokenURL := fmt.Sprintf(entraTokenURLTemplate, c.tenantID)
+	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, err
 	}

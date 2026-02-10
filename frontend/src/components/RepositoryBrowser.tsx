@@ -30,6 +30,7 @@ import {
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import type { SCMRepository, SCMTag, SCMBranch } from '../types/scm';
+import apiClient from '../services/api';
 
 interface RepositoryBrowserProps {
   providerId: string;
@@ -69,37 +70,12 @@ const RepositoryBrowser: React.FC<RepositoryBrowserProps> = ({
     try {
       setLoading(true);
       setError(null);
-      
-      // Mock data for now - in real implementation, this would call the backend API
-      // which would then call the SCM provider's API
-      const mockRepos: SCMRepository[] = [
-        {
-          id: '1',
-          name: 'terraform-aws-vpc',
-          full_name: 'example-org/terraform-aws-vpc',
-          owner: 'example-org',
-          description: 'Terraform module for AWS VPC',
-          default_branch: 'main',
-          clone_url: 'https://github.com/example-org/terraform-aws-vpc.git',
-          html_url: 'https://github.com/example-org/terraform-aws-vpc',
-          private: false,
-        },
-        {
-          id: '2',
-          name: 'terraform-azure-network',
-          full_name: 'example-org/terraform-azure-network',
-          owner: 'example-org',
-          description: 'Terraform module for Azure networking',
-          default_branch: 'main',
-          clone_url: 'https://github.com/example-org/terraform-azure-network.git',
-          html_url: 'https://github.com/example-org/terraform-azure-network',
-          private: true,
-        },
-      ];
 
-      setRepositories(mockRepos);
+      const response = await apiClient.listSCMRepositories(providerId);
+      const repos = response.repositories || [];
+      setRepositories(repos);
     } catch (err: any) {
-      setError('Failed to load repositories');
+      setError(err.response?.data?.error || 'Failed to load repositories');
       console.error('Error loading repositories:', err);
     } finally {
       setLoading(false);

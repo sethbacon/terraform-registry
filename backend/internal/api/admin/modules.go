@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/terraform-registry/terraform-registry/internal/config"
+	"github.com/terraform-registry/terraform-registry/internal/db/models"
 	"github.com/terraform-registry/terraform-registry/internal/db/repositories"
 	"github.com/terraform-registry/terraform-registry/internal/storage"
 )
@@ -26,6 +27,61 @@ func NewModuleAdminHandlers(db *sql.DB, storageBackend storage.Storage, cfg *con
 		storageBackend: storageBackend,
 		cfg:            cfg,
 	}
+}
+
+// CreateModuleRecord creates a module record without a version file.
+// This is used by the SCM publishing flow to register a module before linking it to a repository.
+// POST /api/v1/admin/modules/create
+func (h *ModuleAdminHandlers) CreateModuleRecord(c *gin.Context) {
+	var req struct {
+		Namespace   string `json:"namespace" binding:"required"`
+		Name        string `json:"name" binding:"required"`
+		System      string `json:"system" binding:"required"`
+		Description string `json:"description"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	org, err := h.orgRepo.GetDefaultOrganization(c.Request.Context())
+	if err != nil || org == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get organization context"})
+		return
+	}
+
+	// Return existing module if it already exists
+	existing, err := h.moduleRepo.GetModule(c.Request.Context(), org.ID, req.Namespace, req.Name, req.System)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query module"})
+		return
+	}
+	if existing != nil {
+		c.JSON(http.StatusOK, existing)
+		return
+	}
+
+	module := &models.Module{
+		OrganizationID: org.ID,
+		Namespace:      req.Namespace,
+		Name:           req.Name,
+		System:         req.System,
+	}
+	if req.Description != "" {
+		module.Description = &req.Description
+	}
+	if userID, exists := c.Get("user_id"); exists {
+		if uid, ok := userID.(string); ok {
+			module.CreatedBy = &uid
+		}
+	}
+
+	if err := h.moduleRepo.CreateModule(c.Request.Context(), module); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create module"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, module)
 }
 
 // GetModule retrieves a specific module by namespace, name, and system

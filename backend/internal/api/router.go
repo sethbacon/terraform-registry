@@ -176,6 +176,15 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 			authGroup.GET("/callback", authHandlers.CallbackHandler())
 		}
 
+		// Public search endpoints (no auth required, but rate limited)
+		// These allow public discovery of modules and providers without authentication
+		publicGroup := apiV1.Group("")
+		publicGroup.Use(middleware.RateLimitMiddleware(generalRateLimiter))
+		{
+			publicGroup.GET("/modules/search", modules.SearchHandler(db, cfg))
+			publicGroup.GET("/providers/search", providers.SearchHandler(db, cfg))
+		}
+
 		// Authenticated-only endpoints
 		authenticatedGroup := apiV1.Group("")
 		authenticatedGroup.Use(middleware.AuthMiddleware(cfg, userRepo, apiKeyRepo, orgRepo))
@@ -190,22 +199,19 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 			authenticatedGroup.GET("/admin/stats/dashboard", statsHandlers.GetDashboardStats)
 
 			// Modules admin endpoints - require write permissions
+			authenticatedGroup.POST("/admin/modules/create",
+				middleware.RequireScope(auth.ScopeModulesWrite),
+				moduleAdminHandlers.CreateModuleRecord)
 			authenticatedGroup.POST("/modules",
 				middleware.RateLimitMiddleware(uploadRateLimiter), // Stricter rate limit for uploads
 				middleware.RequireScope(auth.ScopeModulesWrite),
 				modules.UploadHandler(db, storageBackend, cfg))
-			authenticatedGroup.GET("/modules/search",
-				middleware.RequireScope(auth.ScopeModulesRead),
-				modules.SearchHandler(db, cfg))
 
 			// Providers admin endpoints - require write permissions
 			authenticatedGroup.POST("/providers",
 				middleware.RateLimitMiddleware(uploadRateLimiter), // Stricter rate limit for uploads
 				middleware.RequireScope(auth.ScopeProvidersWrite),
 				providers.UploadHandler(db, storageBackend, cfg))
-			authenticatedGroup.GET("/providers/search",
-				middleware.RequireScope(auth.ScopeProvidersRead),
-				providers.SearchHandler(db, cfg))
 			authenticatedGroup.GET("/providers/:namespace/:type",
 				middleware.RequireScope(auth.ScopeProvidersRead),
 				providerAdminHandlers.GetProvider)
@@ -308,18 +314,22 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 
 				// OAuth flow endpoints require scm:manage
 				scmProvidersGroup.GET("/:id/oauth/authorize", middleware.RequireScope(auth.ScopeSCMManage), scmOAuthHandlers.InitiateOAuth)
+				scmProvidersGroup.GET("/:id/oauth/token", middleware.RequireScope(auth.ScopeSCMRead), scmOAuthHandlers.GetTokenStatus)
 				scmProvidersGroup.DELETE("/:id/oauth/token", middleware.RequireScope(auth.ScopeSCMManage), scmOAuthHandlers.RevokeOAuth)
 				scmProvidersGroup.POST("/:id/oauth/refresh", middleware.RequireScope(auth.ScopeSCMManage), scmOAuthHandlers.RefreshToken)
 
 				// PAT-based auth (e.g., Bitbucket Data Center)
 				scmProvidersGroup.POST("/:id/token", middleware.RequireScope(auth.ScopeSCMManage), scmOAuthHandlers.SavePATToken)
+
+				// Repository listing - requires scm:read
+				scmProvidersGroup.GET("/:id/repositories", middleware.RequireScope(auth.ScopeSCMRead), scmOAuthHandlers.ListRepositories)
 			}
 
 			// SCM OAuth callback (public endpoint, no auth required)
 			apiV1.GET("/scm-providers/:id/oauth/callback", scmOAuthHandlers.HandleOAuthCallback)
 
 			// Module SCM linking endpoints
-		moduleSCMGroup := authenticatedGroup.Group("/admin/modules/:id/scm")
+			moduleSCMGroup := authenticatedGroup.Group("/admin/modules/:id/scm")
 			moduleSCMGroup.Use(middleware.RequireScope(auth.ScopeModulesWrite))
 			{
 				moduleSCMGroup.POST("", scmLinkingHandler.LinkModuleToSCM)

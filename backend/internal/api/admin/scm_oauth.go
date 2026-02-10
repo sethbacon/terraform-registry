@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -43,15 +44,10 @@ func (h *SCMOAuthHandlers) InitiateOAuth(c *gin.Context) {
 	}
 
 	// Get user ID from context (set by auth middleware)
-	userIDValue, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
-		return
-	}
-
-	userID, ok := userIDValue.(uuid.UUID)
+	// Note: user.ID is stored as string, so we parse it to uuid.UUID
+	userID, ok := getUserIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
 		return
 	}
 
@@ -76,12 +72,26 @@ func (h *SCMOAuthHandlers) InitiateOAuth(c *gin.Context) {
 	if provider.BaseURL != nil {
 		baseURL = *provider.BaseURL
 	}
+
+	// Decrypt client secret
+	clientSecret, err := h.tokenCipher.Open(provider.ClientSecretEncrypted)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to decrypt client secret"})
+		return
+	}
+
+	tenantID := ""
+	if provider.TenantID != nil {
+		tenantID = *provider.TenantID
+	}
+
 	connector, err := scm.BuildConnector(&scm.ConnectorSettings{
 		Kind:            provider.ProviderType,
 		InstanceBaseURL: baseURL,
 		ClientID:        provider.ClientID,
-		ClientSecret:    provider.ClientSecretEncrypted,
+		ClientSecret:    clientSecret,
 		CallbackURL:     fmt.Sprintf("%s/api/v1/scm-providers/%s/oauth/callback", h.cfg.Server.BaseURL, providerID),
+		TenantID:        tenantID,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create connector"})
@@ -116,9 +126,17 @@ func (h *SCMOAuthHandlers) HandleOAuthCallback(c *gin.Context) {
 		return
 	}
 
-	// Parse state to get user ID
-	var userID uuid.UUID
-	fmt.Sscanf(state, "%s:", &userID)
+	// Parse state to get user ID (format: "userID:providerID")
+	stateParts := strings.SplitN(state, ":", 2)
+	if len(stateParts) != 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid state parameter"})
+		return
+	}
+	userID, err := uuid.Parse(stateParts[0])
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID in state"})
+		return
+	}
 
 	// Get provider configuration
 	provider, err := h.scmRepo.GetProvider(c.Request.Context(), providerID)
@@ -135,11 +153,17 @@ func (h *SCMOAuthHandlers) HandleOAuthCallback(c *gin.Context) {
 	}
 
 	// Build connector
+	callbackTenantID := ""
+	if provider.TenantID != nil {
+		callbackTenantID = *provider.TenantID
+	}
+
 	connector, err := scm.BuildConnector(&scm.ConnectorSettings{
 		Kind:         provider.ProviderType,
 		ClientID:     provider.ClientID,
 		ClientSecret: clientSecret,
 		CallbackURL:  fmt.Sprintf("%s/api/v1/scm-providers/%s/oauth/callback", h.cfg.Server.BaseURL, providerID),
+		TenantID:     callbackTenantID,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create connector"})
@@ -235,15 +259,9 @@ func (h *SCMOAuthHandlers) RevokeOAuth(c *gin.Context) {
 	}
 
 	// Get user ID from context
-	userIDValue, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
-		return
-	}
-
-	userID, ok := userIDValue.(uuid.UUID)
+	userID, ok := getUserIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
 		return
 	}
 
@@ -266,15 +284,9 @@ func (h *SCMOAuthHandlers) RefreshToken(c *gin.Context) {
 	}
 
 	// Get user ID from context
-	userIDValue, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
-		return
-	}
-
-	userID, ok := userIDValue.(uuid.UUID)
+	userID, ok := getUserIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
 		return
 	}
 
@@ -310,11 +322,17 @@ func (h *SCMOAuthHandlers) RefreshToken(c *gin.Context) {
 	}
 
 	// Build connector
+	refreshTenantID := ""
+	if provider.TenantID != nil {
+		refreshTenantID = *provider.TenantID
+	}
+
 	connector, err := scm.BuildConnector(&scm.ConnectorSettings{
 		Kind:         provider.ProviderType,
 		ClientID:     provider.ClientID,
 		ClientSecret: clientSecret,
 		CallbackURL:  fmt.Sprintf("%s/api/v1/scm-providers/%s/oauth/callback", h.cfg.Server.BaseURL, providerID),
+		TenantID:     refreshTenantID,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create connector"})
@@ -381,15 +399,9 @@ func (h *SCMOAuthHandlers) SavePATToken(c *gin.Context) {
 	}
 
 	// Get user ID from context
-	userIDValue, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
-		return
-	}
-
-	userID, ok := userIDValue.(uuid.UUID)
+	userID, ok := getUserIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
 		return
 	}
 
@@ -452,6 +464,189 @@ func (h *SCMOAuthHandlers) SavePATToken(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Personal Access Token saved successfully"})
+}
+
+// GetTokenStatus returns the OAuth connection status for the current user and a provider
+// GET /api/v1/scm-providers/:id/oauth/token
+func (h *SCMOAuthHandlers) GetTokenStatus(c *gin.Context) {
+	providerIDStr := c.Param("id")
+	providerID, err := uuid.Parse(providerIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid provider ID"})
+		return
+	}
+
+	userID, ok := getUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+
+	token, err := h.scmRepo.GetUserToken(c.Request.Context(), userID, providerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get token status"})
+		return
+	}
+
+	if token == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"connected":    false,
+			"connected_at": nil,
+			"expires_at":   nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"connected":    true,
+		"connected_at": token.UpdatedAt,
+		"expires_at":   token.ExpiresAt,
+		"token_type":   token.TokenType,
+	})
+}
+
+// ListRepositories lists repositories from the SCM provider
+// GET /api/v1/scm-providers/:id/repositories
+func (h *SCMOAuthHandlers) ListRepositories(c *gin.Context) {
+	providerIDStr := c.Param("id")
+	providerID, err := uuid.Parse(providerIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid provider ID"})
+		return
+	}
+
+	userID, ok := getUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+
+	// Get provider configuration
+	provider, err := h.scmRepo.GetProvider(c.Request.Context(), providerID)
+	if err != nil || provider == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+		return
+	}
+
+	// Get user's token for this provider
+	tokenRecord, err := h.scmRepo.GetUserToken(c.Request.Context(), userID, providerID)
+	if err != nil || tokenRecord == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "not connected to this provider"})
+		return
+	}
+
+	// Decrypt the access token
+	accessToken, err := h.tokenCipher.Open(tokenRecord.AccessTokenEncrypted)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to decrypt access token"})
+		return
+	}
+
+	// Decrypt client secret
+	clientSecret, err := h.tokenCipher.Open(provider.ClientSecretEncrypted)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to decrypt client secret"})
+		return
+	}
+
+	// Build connector
+	baseURL := ""
+	if provider.BaseURL != nil {
+		baseURL = *provider.BaseURL
+	}
+
+	tenantID := ""
+	if provider.TenantID != nil {
+		tenantID = *provider.TenantID
+	}
+
+	connector, err := scm.BuildConnector(&scm.ConnectorSettings{
+		Kind:            provider.ProviderType,
+		InstanceBaseURL: baseURL,
+		ClientID:        provider.ClientID,
+		ClientSecret:    clientSecret,
+		CallbackURL:     fmt.Sprintf("%s/api/v1/scm-providers/%s/oauth/callback", h.cfg.Server.BaseURL, providerID),
+		TenantID:        tenantID,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create connector"})
+		return
+	}
+
+	// Create AccessToken from the decrypted token
+	token := &scm.AccessToken{
+		AccessToken: accessToken,
+		TokenType:   tokenRecord.TokenType,
+		ExpiresAt:   tokenRecord.ExpiresAt,
+	}
+
+	// Parse refresh token if present
+	if tokenRecord.RefreshTokenEncrypted != nil {
+		refreshToken, err := h.tokenCipher.Open(*tokenRecord.RefreshTokenEncrypted)
+		if err == nil {
+			token.RefreshToken = refreshToken
+		}
+	}
+
+	// Parse scopes if present
+	if tokenRecord.Scopes != nil && *tokenRecord.Scopes != "" {
+		token.Scopes = splitString(*tokenRecord.Scopes, ",")
+	}
+
+	// Get search query parameter
+	search := c.Query("search")
+
+	// List repositories using the connector
+	var repos *scm.RepoListResult
+	if search != "" {
+		repos, err = connector.SearchRepositories(c.Request.Context(), token, search, scm.DefaultPagination())
+	} else {
+		repos, err = connector.FetchRepositories(c.Request.Context(), token, scm.DefaultPagination())
+	}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to list repositories: %v", err)})
+		return
+	}
+
+	// Convert to frontend-friendly format
+	repositories := make([]gin.H, len(repos.Repos))
+	for i, repo := range repos.Repos {
+		repositories[i] = gin.H{
+			"id":              repo.ID,
+			"name":            repo.Name,
+			"full_name":       repo.FullName,
+			"owner":           repo.Owner,
+			"description":     repo.Description,
+			"default_branch":  repo.DefaultBranch,
+			"clone_url":       repo.CloneURL,
+			"html_url":        repo.HTMLURL,
+			"private":         repo.Private,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"repositories": repositories})
+}
+
+// getUserIDFromContext extracts the user ID from the Gin context.
+// The auth middleware stores user.ID as a string, so we parse it to uuid.UUID.
+func getUserIDFromContext(c *gin.Context) (uuid.UUID, bool) {
+	userIDValue, exists := c.Get("user_id")
+	if !exists {
+		return uuid.UUID{}, false
+	}
+	switch v := userIDValue.(type) {
+	case uuid.UUID:
+		return v, true
+	case string:
+		parsed, err := uuid.Parse(v)
+		if err != nil {
+			return uuid.UUID{}, false
+		}
+		return parsed, true
+	default:
+		return uuid.UUID{}, false
+	}
 }
 
 // Helper function to split string

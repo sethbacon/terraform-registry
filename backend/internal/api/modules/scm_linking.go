@@ -32,13 +32,13 @@ func NewSCMLinkingHandler(scmRepo *repositories.SCMRepository, moduleRepo *repos
 }
 
 type LinkSCMRequest struct {
-	SCMProviderID   string `json:"scm_provider_id" binding:"required"`
-	RepositoryOwner string `json:"repo_owner" binding:"required"`
-	RepositoryName  string `json:"repo_name" binding:"required"`
-	DefaultBranch   string `json:"primary_branch"`
-	ModulePath      string `json:"module_subpath"`
-	TagPattern      string `json:"version_tag_glob"`
-	AutoPublish     bool   `json:"publish_on_tag"`
+	SCMProviderID   string `json:"provider_id" binding:"required"`
+	RepositoryOwner string `json:"repository_owner" binding:"required"`
+	RepositoryName  string `json:"repository_name" binding:"required"`
+	DefaultBranch   string `json:"default_branch"`
+	ModulePath      string `json:"repository_path"`
+	TagPattern      string `json:"tag_pattern"`
+	AutoPublish     bool   `json:"auto_publish_enabled"`
 }
 
 // LinkModuleToSCM links a module to an SCM repository

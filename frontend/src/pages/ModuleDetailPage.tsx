@@ -34,11 +34,16 @@ import {
   Delete,
   Warning,
   Restore,
+  AccountTree as SCMIcon,
+  LinkOff as UnlinkIcon,
+  Sync as SyncIcon,
 } from '@mui/icons-material';
-import api from '../services/api';
+import api, { apiClient } from '../services/api';
 import { Module, ModuleVersion } from '../types';
+import type { ModuleSCMLink } from '../types/scm';
 import { useAuth } from '../contexts/AuthContext';
 import { REGISTRY_HOST } from '../config';
+import PublishFromSCMWizard from '../components/PublishFromSCMWizard';
 
 const ModuleDetailPage: React.FC = () => {
   const { namespace, name, system } = useParams<{
@@ -62,6 +67,13 @@ const ModuleDetailPage: React.FC = () => {
   const [deprecateDialogOpen, setDeprecateDialogOpen] = useState(false);
   const [deprecationMessage, setDeprecationMessage] = useState('');
   const [deprecating, setDeprecating] = useState(false);
+
+  // SCM linking state
+  const [scmLink, setScmLink] = useState<ModuleSCMLink | null>(null);
+  const [scmLinkLoaded, setScmLinkLoaded] = useState(false);
+  const [scmWizardOpen, setScmWizardOpen] = useState(false);
+  const [scmSyncing, setScmSyncing] = useState(false);
+  const [scmUnlinking, setScmUnlinking] = useState(false);
 
   useEffect(() => {
     loadModuleDetails();
@@ -87,6 +99,9 @@ const ModuleDetailPage: React.FC = () => {
       }
 
       setModule(moduleData);
+      if (moduleData?.id && isAuthenticated) {
+        loadSCMLink(moduleData.id);
+      }
 
       // Merge version data - getModule has basic version info, getModuleVersions has readme/published_at
       const protocolVersions = versionsData.modules?.[0]?.versions || [];
@@ -114,6 +129,42 @@ const ModuleDetailPage: React.FC = () => {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSCMLink = async (moduleId: string) => {
+    try {
+      const link = await apiClient.getModuleSCMInfo(moduleId);
+      setScmLink(link);
+    } catch {
+      setScmLink(null); // 404 = not linked, which is fine
+    } finally {
+      setScmLinkLoaded(true);
+    }
+  };
+
+  const handleSCMUnlink = async () => {
+    if (!module?.id) return;
+    try {
+      setScmUnlinking(true);
+      await apiClient.unlinkModuleFromSCM(module.id);
+      setScmLink(null);
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'Failed to unlink repository');
+    } finally {
+      setScmUnlinking(false);
+    }
+  };
+
+  const handleSCMSync = async () => {
+    if (!module?.id) return;
+    try {
+      setScmSyncing(true);
+      await apiClient.triggerManualSync(module.id);
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'Failed to trigger sync');
+    } finally {
+      setScmSyncing(false);
     }
   };
 
@@ -456,6 +507,80 @@ const ModuleDetailPage: React.FC = () => {
             </Box>
           </Paper>
 
+          {/* SCM Repository Panel */}
+          {isAuthenticated && scmLinkLoaded && (
+            <Paper sx={{ p: 3, mb: 3 }}>
+              <Box display="flex" alignItems="center" gap={1} mb={1}>
+                <SCMIcon fontSize="small" color="action" />
+                <Typography variant="h6">Source Repository</Typography>
+              </Box>
+              <Divider sx={{ mb: 2 }} />
+              {scmLink ? (
+                <Box>
+                  <Typography variant="body2" sx={{ mb: 0.5 }}>
+                    <strong>{scmLink.repository_owner}/{scmLink.repository_name}</strong>
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                    Branch: {scmLink.default_branch}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                    Tag pattern: <code>{scmLink.tag_pattern || 'v*'}</code>
+                  </Typography>
+                  <Chip
+                    label={scmLink.auto_publish_enabled ? 'Auto-publish on' : 'Auto-publish off'}
+                    size="small"
+                    color={scmLink.auto_publish_enabled ? 'success' : 'default'}
+                    variant="outlined"
+                    sx={{ mb: 1.5, fontSize: '0.7rem' }}
+                  />
+                  {scmLink.last_sync_at && (
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1.5 }}>
+                      Last synced: {new Date(scmLink.last_sync_at).toLocaleString()}
+                    </Typography>
+                  )}
+                  <Stack spacing={1}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={scmSyncing ? <CircularProgress size={14} /> : <SyncIcon />}
+                      onClick={handleSCMSync}
+                      disabled={scmSyncing}
+                      fullWidth
+                    >
+                      {scmSyncing ? 'Syncing...' : 'Sync Now'}
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      size="small"
+                      startIcon={scmUnlinking ? <CircularProgress size={14} /> : <UnlinkIcon />}
+                      onClick={handleSCMUnlink}
+                      disabled={scmUnlinking}
+                      fullWidth
+                    >
+                      {scmUnlinking ? 'Unlinking...' : 'Unlink Repository'}
+                    </Button>
+                  </Stack>
+                </Box>
+              ) : (
+                <Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Not linked to a repository. Link one to enable automatic version publishing.
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<SCMIcon />}
+                    onClick={() => setScmWizardOpen(true)}
+                    fullWidth
+                  >
+                    Link Repository
+                  </Button>
+                </Box>
+              )}
+            </Paper>
+          )}
+
           {/* Selected Version Details */}
           {selectedVersion && (
             <Paper sx={{ p: 3 }}>
@@ -583,6 +708,28 @@ const ModuleDetailPage: React.FC = () => {
             {deleting ? 'Deleting...' : 'Delete Version'}
           </Button>
         </DialogActions>
+      </Dialog>
+
+      {/* SCM Link Wizard Dialog */}
+      <Dialog
+        open={scmWizardOpen}
+        onClose={() => setScmWizardOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Link Repository</DialogTitle>
+        <DialogContent>
+          {module?.id && (
+            <PublishFromSCMWizard
+              moduleId={module.id}
+              onComplete={() => {
+                setScmWizardOpen(false);
+                if (module?.id) loadSCMLink(module.id);
+              }}
+              onCancel={() => setScmWizardOpen(false)}
+            />
+          )}
+        </DialogContent>
       </Dialog>
 
       {/* Deprecate Version Dialog */}

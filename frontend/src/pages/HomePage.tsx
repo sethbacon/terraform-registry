@@ -18,11 +18,9 @@ import {
   Search,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
 
   const features = [
     {
@@ -92,22 +90,20 @@ const HomePage: React.FC = () => {
             >
               Browse Modules
             </Button>
-            {isAuthenticated && (
-              <Button
-                variant="contained"
-                size="large"
-                onClick={() => navigate('/providers')}
-                sx={{
+            <Button
+              variant="contained"
+              size="large"
+              onClick={() => navigate('/providers')}
+              sx={{
                 backgroundColor: 'white',
                 color: '#5C4EE5',
                 '&:hover': {
                   backgroundColor: 'rgba(255, 255, 255, 0.9)',
                 },
               }}
-              >
-                Browse Providers
-              </Button>
-            )}
+            >
+              Browse Providers
+            </Button>
           </Stack>
         </Container>
       </Box>

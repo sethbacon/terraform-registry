@@ -156,6 +156,7 @@ type SCMProvider struct {
 	ProviderType          ProviderType `json:"provider_type" db:"provider_type"`
 	Name                  string       `json:"name" db:"name"`
 	BaseURL               *string      `json:"base_url,omitempty" db:"base_url"`
+	TenantID              *string      `json:"tenant_id,omitempty" db:"tenant_id"`
 	ClientID              string       `json:"client_id" db:"client_id"`
 	ClientSecretEncrypted string       `json:"-" db:"client_secret_encrypted"`
 	WebhookSecret         string       `json:"-" db:"webhook_secret"`

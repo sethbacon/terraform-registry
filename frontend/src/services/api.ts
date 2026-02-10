@@ -43,12 +43,17 @@ class ApiClient {
         if (USE_MOCK_DATA) {
           return this.getMockResponse(error.config?.url || '');
         }
-        
+
         if (error.response?.status === 401) {
-          // Token expired or invalid
-          localStorage.removeItem('auth_token');
-          localStorage.removeItem('user');
-          window.location.href = '/login';
+          // Only redirect to login if user was authenticated (has token)
+          const token = localStorage.getItem('auth_token');
+          if (token) {
+            // Token expired or invalid
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user');
+            window.location.href = '/login';
+          }
+          // If no token, allow the error to propagate (for public endpoints)
         }
         return Promise.reject(error);
       }
@@ -124,6 +129,16 @@ class ApiClient {
     const response = await this.client.get(
       `/v1/modules/${namespace}/${name}/${system}/versions`
     );
+    return response.data;
+  }
+
+  async createModuleRecord(data: {
+    namespace: string;
+    name: string;
+    system: string;
+    description?: string;
+  }): Promise<{ id: string; namespace: string; name: string; system: string }> {
+    const response = await this.client.post('/api/v1/admin/modules/create', data);
     return response.data;
   }
 
@@ -474,6 +489,7 @@ class ApiClient {
     data: {
       name?: string;
       base_url?: string | null;
+      tenant_id?: string | null;
       client_id?: string;
       client_secret?: string;
       webhook_secret?: string;
@@ -497,6 +513,22 @@ class ApiClient {
 
   async refreshSCMToken(providerId: string) {
     const response = await this.client.post(`/api/v1/scm-providers/${providerId}/oauth/refresh`);
+    return response.data;
+  }
+
+  async getSCMTokenStatus(providerId: string): Promise<{
+    connected: boolean;
+    connected_at?: string;
+    expires_at?: string | null;
+    token_type?: string;
+  }> {
+    const response = await this.client.get(`/api/v1/scm-providers/${providerId}/oauth/token`);
+    return response.data;
+  }
+
+  async listSCMRepositories(providerId: string, search?: string) {
+    const params = search ? { search } : {};
+    const response = await this.client.get(`/api/v1/scm-providers/${providerId}/repositories`, { params });
     return response.data;
   }
 
