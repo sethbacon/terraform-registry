@@ -26,21 +26,36 @@ export default defineConfig({
       },
     } : {}),
     proxy: {
-      '/api': {
-        target: 'https://registry.local:443',
+      // Proxy the Swagger spec to the backend. /api-docs and /api-docs/ are React
+      // Router SPA routes and must NOT be proxied — Vite's SPA fallback handles them.
+      '/swagger.json': {
+        target: 'https://localhost:443',
         changeOrigin: true,
-        secure: false, // Accept self-signed certs
+        secure: false,
+      },
+      '/swagger.yaml': {
+        target: 'https://localhost:443',
+        changeOrigin: true,
+        secure: false,
+      },
+      // Use /api/ (with slash) so this prefix only matches /api/v1/...
+      // and does NOT accidentally match /api-docs which is a React Router route.
+      '/api/': {
+        target: 'https://localhost:443',
+        changeOrigin: true,
+        secure: false,
       },
       '/v1': {
-        target: 'https://registry.local:443',
+        target: 'https://localhost:443',
         changeOrigin: true,
         secure: false,
       },
       '/.well-known': {
-        target: 'https://registry.local:443',
+        target: 'https://localhost:443',
         changeOrigin: true,
         secure: false,
       },
     },
+    
   },
 })

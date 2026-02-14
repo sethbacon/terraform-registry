@@ -10,6 +10,17 @@ import (
 	"github.com/terraform-registry/terraform-registry/internal/db/repositories"
 )
 
+// @Summary      List module versions
+// @Description  List all available versions for a specific module. Implements the Terraform Module Registry Protocol.
+// @Tags         Modules
+// @Produce      json
+// @Param        namespace  path  string  true  "Module namespace"
+// @Param        name       path  string  true  "Module name"
+// @Param        system     path  string  true  "Target system (e.g. aws, azurerm)"
+// @Success      200  {object}  map[string]interface{}  "modules: [{source, versions: [{version, ...}]}]"
+// @Failure      404  {object}  map[string]interface{}  "Module not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /v1/modules/{namespace}/{name}/{system}/versions [get]
 // ListVersionsHandler handles listing all versions of a module
 // Implements: GET /v1/modules/:namespace/:name/:system/versions
 func ListVersionsHandler(db *sql.DB, cfg *config.Config) gin.HandlerFunc {

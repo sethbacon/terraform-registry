@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD024 -->
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
@@ -9,11 +11,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planned
 
-- Phase 5B: Azure DevOps pipeline extension for publishing (deferred)
-- Phase 6: Azure Blob Storage and S3-compatible storage backends
-- Phase 6: Deployment configurations (Kubernetes, Helm, Azure Container Apps)
 - Phase 7: Comprehensive documentation and testing suite
 - Phase 8: Production polish (monitoring, observability, security hardening)
+
+## [1.0.0] - 2026-02-10 - Sessions 22-25 (Phase 6 Complete)
+
+### Added
+
+- **Phase 6 Complete: All Storage Backends, Deployments, and SCM Integrations**
+
+- **Session 22: Bitbucket Data Center SCM Integration**
+  - Bitbucket Data Center connector with full API integration (636 LOC)
+  - Repository browsing, search, and tag enumeration with commit SHA resolution
+  - Webhook creation and management for automated publishing
+  - Personal Access Token (PAT) authentication for Bitbucket (no OAuth required)
+  - Database migration 000027: Added `bitbucket_host` column to scm_providers
+  - Frontend support for Bitbucket DC with dynamic form fields
+  - Extended SCMProvider type with bitbucket_host field
+  - SCM provider type constant and error handling for Bitbucket
+
+- **Session 23: Storage Configuration in Terraform**
+  - Added storage backend variable support to all 3 Terraform configs (AWS, Azure, GCP)
+  - Each cloud defaults to native storage with zero additional configuration:
+    - AWS: S3 with IAM role authentication
+    - Azure: Azure Blob Storage with Direct Account Key
+    - GCP: Google Cloud Storage with Workload Identity
+  - All 4 storage backends (S3, Azure Blob, GCS, Local) available in every cloud
+  - Conditional secrets management via Secrets Manager/Secret Manager/Key Vault
+  - Storage configuration merged into task definitions/container apps via locals
+  - Enhanced RBAC with storage-specific scope support (storage:read, storage:write, storage:manage)
+
+- **Session 24: API Key Frontend Lifecycle Management**
+  - Optional expiration date field in API key creation dialog
+  - API key edit dialog for updating name, scopes, and expiration
+  - API key rotation with grace period options (1-72h slider)
+  - Expiration indicators: Red "Expired", orange "Expires soon" (within 7 days)
+  - Scopes column with chip display and overflow tooltip
+  - Helper functions for expiration status and datetime conversion
+  - `rotateAPIKey()` method in API service
+  - Copy-to-clipboard for newly rotated API key values
+
+- **Session 25: Storage Configuration Azure Bug Fix & Phase 6 Completion**
+  - Fixed critical bug in Azure Terraform deployment:
+    - Corrected `azurerm_storage_account` resource reference to `azurerm_storage_account.main.primary_access_key`
+    - Ensures proper Container App secret management
+    - Resolves failures related to storage account key initialization
+  - Cleaned up database migration state for Bitbucket DC
+  - Removed duplicate/empty migration files
+
+### Summary of Phase 6 Deliverables
+
+**Storage Backends (Sessions 16-18):**
+
+- ✅ Azure Blob Storage backend with SAS token support and CDN URLs
+- ✅ AWS S3-compatible backend with presigned URLs and multipart uploads
+- ✅ Google Cloud Storage backend with signed URLs and resumable uploads
+- ✅ All backends support multiple authentication methods
+- ✅ SHA256 checksum calculation and verification for all uploads
+
+**Deployment Configurations (Sessions 20-21):**
+
+- ✅ Docker Compose (dev and production)
+- ✅ Kubernetes + Kustomize with base and environment overlays (dev, prod)
+- ✅ Helm Chart with configurable values and all storage backends
+- ✅ Azure Container Apps with Bicep templates
+- ✅ AWS ECS Fargate with CloudFormation stack
+- ✅ Google Cloud Run with VPC connectors
+- ✅ Standalone binary deployment with systemd and nginx
+- ✅ Terraform IaC for AWS, Azure, and GCP with full storage configuration
+
+**SCM Enhancements & API Keys (Sessions 22-24):**
+
+- ✅ Bitbucket Data Center as 4th SCM provider alongside GitHub, Azure DevOps, GitLab
+- ✅ Complete API key lifecycle management with expiration and rotation
+- ✅ Frontend UI for API key creation, editing, and rotation
+- ✅ Scope management with checkboxes and overflow handling
+
+### Milestone
+
+- **✅ Phase 6 Complete**: Enterprise-grade Terraform Registry fully implemented
+  - All 3 Terraform protocols (Module, Provider, Mirror)
+  - 4 storage backends with multi-cloud support
+  - 4 SCM providers with automated publishing
+  - Complete deployment options (Docker, K8s, PaaS, binary)
+  - Full authentication and RBAC system
+  - React SPA with comprehensive admin UI
+  - Ready for Phase 7 (Testing & Documentation) and Phase 8 (Production Polish)
 
 ## [0.9.0] - 2026-02-06 - Session 15
 
@@ -71,6 +154,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0] - 2026-02-04 - Session 13
 
 ### Added
+
 - **SCM Frontend UI & Comprehensive Debugging (Phase 5A Session 13)**
   - Complete SCM provider management interface
   - Repository browser with search and filtering
@@ -82,6 +166,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - ISO 8601 date formatting for international compatibility
 
 ### Fixed
+
 - **Single-Tenant Mode Issues**:
   - Organization filtering now correctly skips when multi-tenancy is disabled
   - Search handlers conditionally check MultiTenancy.Enabled configuration
@@ -117,6 +202,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Removed duplicate generic guidelines section
 
 ### Technical Details
+
 - Backend search endpoints now query versions to compute latest_version
 - Module versions: Sum download_count across all versions
 - Provider versions: Platform-level downloads (set to 0 pending aggregation implementation)
@@ -125,11 +211,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Network mirror differentiation uses provider.source field presence
 
 ### Phase Completion
+
 - ✅ **Phase 5A Complete**: SCM integration fully implemented with production-ready UI
 
 ## [0.6.0] - 2024-01-XX - Session 11
 
 ### Added
+
 - **SCM OAuth Flows & Repository Operations (Phase 5A Session 11)**
   - GitHub connector with complete OAuth 2.0 authorization flow
   - GitHub repository listing, searching, and browsing
@@ -148,6 +236,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Repository search functionality
 
 ### Technical Details
+
 - **GitHub Integration**:
   - OAuth app flow with code exchange
   - REST API v3 with proper versioning headers
@@ -168,6 +257,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Stub implementations ready for completion
 
 ### Infrastructure
+
 - Connector interface with consistent API across providers
 - Error handling with wrapped remote API errors
 - Token expiry checking and validation
@@ -176,6 +266,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.1] - 2024-01-XX - Session 10
 
 ### Added
+
 - **SCM Integration Foundation (Phase 5A Session 10)**
   - Database migration for SCM integration (008_scm_integration.sql)
   - SCM provider configurations table
@@ -190,6 +281,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Error definitions for SCM operations
 
 ### Changed
+
 - Extended module_versions table with SCM metadata (commit SHA, source URL, tag)
 
 ## [0.5.0] - 2024-01-XX - Session 9
@@ -329,7 +421,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Request validation utilities
 - Checksum utilities for file integrity
 
-[Unreleased]: https://github.com/yourusername/terraform-registry/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/yourusername/terraform-registry/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/yourusername/terraform-registry/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/yourusername/terraform-registry/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/yourusername/terraform-registry/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/yourusername/terraform-registry/compare/v0.6.0...v0.7.0

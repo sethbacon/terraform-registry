@@ -1,9 +1,11 @@
+<!-- markdownlint-disable MD024 -->
+
 # Enterprise Terraform Registry
 
 A fully-featured, enterprise-grade Terraform registry implementing all three HashiCorp protocols with modern web UI and multi-tenancy support.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go)](https://go.dev/)
 [![React](https://img.shields.io/badge/React-18+-61DAFB?logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5+-3178C6?logo=typescript)](https://www.typescriptlang.org/)
 
@@ -36,8 +38,10 @@ A fully-featured, enterprise-grade Terraform registry implementing all three Has
 - **GitHub Integration** - Connect modules to GitHub repositories with OAuth
 - **Azure DevOps Integration** - Native support for Azure Repos
 - **GitLab Integration** - Full GitLab repository support
+- **Bitbucket Data Center** - Support for self-hosted Bitbucket instances with PAT authentication
 - **Webhook Support** - Automatic publishing on repository events
-- **Immutable Publishing** - Version control integration for module releases
+- **Immutable Publishing** - Version control integration with commit SHA pinning
+- **Module README Support** - Automatic README extraction and rendering from module sources
 
 #### Provider Mirroring
 
@@ -55,87 +59,103 @@ A fully-featured, enterprise-grade Terraform registry implementing all three Has
 #### Storage Backends
 
 - **Local Filesystem** - Direct file serving for development and simple deployments
-- **Pluggable Architecture** - Extensible storage interface for cloud providers
-- ⏳ Azure Blob Storage (planned - Phase 6)
-- ⏳ S3-Compatible Storage (planned - Phase 6)
+- **Azure Blob Storage** - Cloud storage with SAS tokens, CDN URLs, and flexible access tiers
+- **AWS S3 / S3-Compatible** - Support for AWS S3, MinIO, DigitalOcean Spaces with presigned URLs and multipart uploads
+- **Google Cloud Storage** - Native GCS integration with signed URLs and resumable uploads
+- **Pluggable Architecture** - Extensible storage interface for adding new backends
+- **Storage Configuration UI** - Admin dashboard for configuring and switching between storage backends
+- **Multiple Auth Methods** - Support for IAM roles, service accounts, workload identity, and explicit credentials
+
+#### API Key Management
+
+- **API Key Lifecycle** - Complete key management with creation, rotation, and deletion
+- **Expiration Dates** - Set optional expiration dates for automatic key invalidation
+- **Key Rotation** - Rotate keys with grace periods (1-72 hours) for seamless transitions
+- **Scope Management** - Fine-grained permission control for each key
+- **Scope-Based Authorization** - Keys can be restricted to specific operations (modules:read, modules:write, providers:read, providers:write, mirrors:manage, admin:*)
+
+#### Deployment Options
+
+- **Docker Compose** - Complete development and production setups with all services
+- **Kubernetes + Kustomize** - Production-ready manifests with base and environment-specific overlays (dev, production)
+- **Helm Chart** - Fully parameterized Helm chart with support for all storage backends and configurations
+- **Azure Container Apps** - Bicep templates for Azure Container Apps deployment
+- **AWS ECS Fargate** - CloudFormation stack with VPC, RDS PostgreSQL, ALB, and auto-scaling
+- **Google Cloud Run** - Knative services with Cloud SQL, Cloud Storage, and Secret Manager integration
+- **Standalone Binary** - Systemd service with Nginx reverse proxy for production deployments
+- **Terraform IaC** - Complete Infrastructure-as-Code for AWS, Azure, and GCP with parameterized storage backend configuration
 
 #### Modern Web Interface
 
 - **React 18+ SPA** - Fast, responsive single-page application
 - **TypeScript** - Full type safety across the frontend
 - **Material-UI** - Professional, accessible component library
-- **Module Browser** - Search, filter, and explore modules with pagination
-- **Provider Browser** - Discover and manage provider versions
+- **Module Browser** - Search, filter, and explore modules with pagination and README rendering
+- **Provider Browser** - Discover and manage provider versions with platform information
 - **Admin Dashboard** - System statistics and management tools
-- **Upload Interface** - Easy module and provider publishing
+- **Upload Interface** - Easy module and provider publishing with SCM linking
+- **SCM Management** - Connect and configure GitHub, Azure DevOps, GitLab, and Bitbucket repositories
+- **Mirror Management** - Configure and trigger provider synchronization from upstream registries
+- **API Key Management** - Create, edit, rotate, and expire API keys with scope controls
 - **Responsive Design** - Works on desktop, tablet, and mobile
-
-#### Security
-
-- **GPG Verification** - Provider binary signature validation
-- **SHA256 Checksums** - File integrity verification
-- **Path Traversal Protection** - Secure archive extraction
-- **Input Validation** - Semantic versioning and format validation
-- **Audit Logging** - Comprehensive activity tracking
-- **Rate Limiting** - API protection (coming soon)
 
 ### 📋 Planned
 
-#### Additional Storage Backends (Phase 6 - Next)
+#### Testing & Documentation (Phase 7)
 
-- Azure Blob Storage backend with SAS token support
-- S3-compatible storage backend (AWS S3, MinIO)
-- Kubernetes Helm charts
-- Azure Container Apps configuration
-
-#### Azure DevOps Extension (Phase 5B - Deferred)
-
-- Custom pipeline task for publishing
-- OIDC authentication with workload identity
-- Visual Studio Marketplace distribution
-
-#### Documentation & Testing (Phase 7)
-
+- Unit and integration tests for backend (target 80%+ coverage)
+- E2E tests for critical user flows
 - Comprehensive API documentation
-- 80%+ test coverage
-- End-to-end test suite
-- Performance benchmarks
+- Deployment guides for all platforms
+- Troubleshooting and FAQ documentation
+- Contributing guidelines and development setup
 
 #### Production Polish (Phase 8)
 
-- OpenTelemetry instrumentation
-- Prometheus metrics
-- Grafana dashboards
-- Performance optimization
+- OpenTelemetry instrumentation and Prometheus metrics
+- Grafana dashboards for monitoring
+- Email alerts for API key expiration
+- Performance optimization and benchmarks
+- Security hardening review
+- Open source license attribution audit
+
+#### Azure DevOps Extension (Phase 5B - Deferred)
+
+- Azure DevOps pipeline task for publishing
+- OIDC authentication with workload identity
+- Visual Studio Marketplace distribution
 
 ## 🏗️ Architecture
 
 ```txt
-┌─────────────────────────────────────────────────────────────┐
-│                     React TypeScript SPA                     │
-│  Module Browser │ Provider Browser │ Admin Dashboard │ Auth │
-└────────────────────────────┬────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                    React TypeScript SPA                          │
+│  Module Browser │ Provider Browser │ Admin Dashboard │ Auth UI  │
+└────────────────────────────┬─────────────────────────────────────┘
                              │
-                             │ REST API
+                             │ REST API / Protocol Endpoints
                              │
-┌────────────────────────────▼────────────────────────────────┐
-│                      Go Backend (Gin)                        │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
-│  │ Modules  │  │Providers │  │  Mirror  │  │  Admin   │   │
-│  │   API    │  │   API    │  │   API    │  │   API    │   │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │         Authentication & Authorization               │  │
-│  │    API Keys │ OIDC │ Azure AD │ RBAC Middleware     │  │
-│  └──────────────────────────────────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │              Storage Abstraction Layer               │  │
-│  │    Local FS │ Azure Blob (planned) │ S3 (planned)   │  │
-│  └──────────────────────────────────────────────────────┘  │
-└────────────────────────────┬────────────────────────────────┘
+┌────────────────────────────▼─────────────────────────────────────┐
+│                      Go 1.24 Backend (Gin)                       │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐         │
+│  │ Modules  │  │Providers │  │  Mirror  │  │  Admin   │         │
+│  │   API    │  │   API    │  │   API    │  │   API    │         │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘         │
+│  ┌─────────────────────────────────────────────────────────┐     │
+│  │      Authentication & Authorization                     │     │
+│  │  JWT │ API Keys │ OIDC │ Azure AD │ RBAC  │ Audit Log   │     │
+│  └─────────────────────────────────────────────────────────┘     │
+│  ┌─────────────────────────────────────────────────────────┐     │
+│  │         SCM Integration & Processing                    │     │
+│  │  GitHub │ Azure DevOps │ GitLab │ Bitbucket DC          │     │
+│  └─────────────────────────────────────────────────────────┘     │
+│  ┌─────────────────────────────────────────────────────────┐     │
+│  │           Storage Abstraction Layer                     │     │
+│  │  Local │ Azure Blob │ S3-Compatible │ GCS              │     │
+│  └─────────────────────────────────────────────────────────┘     │
+└────────────────────────────┬─────────────────────────────────────┘
                              │
-                             │
-                    ┌────────▼────────┐
+                    ┌────────┴────────┐
                     │   PostgreSQL    │
                     │   Database      │
                     └─────────────────┘
@@ -145,7 +165,7 @@ A fully-featured, enterprise-grade Terraform registry implementing all three Has
 
 ### Prerequisites
 
-- Go 1.21 or later
+- Go 1.24 or later
 - Node.js 18+ and npm
 - PostgreSQL 14+
 - Docker & Docker Compose (for containerized deployment)
@@ -205,6 +225,8 @@ npm run build
 
 ### Environment Variables
 
+All configuration can be set via environment variables (prefix: `TFR_`) or YAML config file.
+
 ```bash
 # Database
 export TFR_DATABASE_HOST=localhost
@@ -219,10 +241,25 @@ export TFR_SERVER_PORT=8080
 export TFR_SERVER_HOST=0.0.0.0
 export TFR_SERVER_BASE_URL=http://localhost:8080
 
-# Storage
+# Storage (choose one: local | azure | s3 | gcs)
 export TFR_STORAGE_DEFAULT_BACKEND=local
 export TFR_STORAGE_LOCAL_BASE_PATH=/var/lib/terraform-registry
 export TFR_STORAGE_LOCAL_SERVE_DIRECTLY=true
+
+# Azure Blob Storage (if using azure backend)
+export TFR_STORAGE_AZURE_ACCOUNT_NAME=myaccount
+export TFR_STORAGE_AZURE_CONTAINER_NAME=terraform-registry
+export TFR_STORAGE_AZURE_ACCOUNT_KEY=your_key
+
+# AWS S3 (if using s3 backend)
+export TFR_STORAGE_S3_BUCKET=terraform-registry
+export TFR_STORAGE_S3_REGION=us-east-1
+export TFR_STORAGE_S3_AUTH_METHOD=default  # default, static, oidc, assume_role
+
+# Google Cloud Storage (if using gcs backend)
+export TFR_STORAGE_GCS_BUCKET=terraform-registry
+export TFR_STORAGE_GCS_PROJECT_ID=my-project
+export TFR_STORAGE_GCS_AUTH_METHOD=default  # default, service_account, workload_identity
 
 # Authentication
 export TFR_AUTH_API_KEYS_ENABLED=true
@@ -233,8 +270,9 @@ export TFR_AUTH_AZURE_AD_ENABLED=false
 export TFR_MULTI_TENANCY_ENABLED=false
 export TFR_MULTI_TENANCY_DEFAULT_ORGANIZATION=default
 
-# SCM Integration (optional)
-export ENCRYPTION_KEY=your_32_byte_encryption_key_here
+# Security
+export TFR_JWT_SECRET=your_jwt_secret
+export ENCRYPTION_KEY=your_32_byte_encryption_key
 ```
 
 ### Configuration File
@@ -336,24 +374,40 @@ npm run build
 
 ## 🗺️ Roadmap
 
-### Current: Phase 6 - Storage Backends (Sessions 16-19)
+### Completed: Phase 6 - Storage Backends, Deployments, and SCM Enhancements
 
-- Azure Blob Storage implementation
-- S3-compatible storage implementation
-- Kubernetes and Helm deployment configurations
-- Azure Container Apps configuration
+- ✅ Azure Blob Storage backend with SAS tokens and CDN support
+- ✅ AWS S3 / S3-compatible storage backend with multiple auth methods
+- ✅ Google Cloud Storage backend with signed URLs
+- ✅ Storage configuration UI for runtime backend switching
+- ✅ Docker Compose development and production setups
+- ✅ Kubernetes + Kustomize with base and overlays
+- ✅ Helm Chart for production deployments
+- ✅ Azure Container Apps with Bicep templates
+- ✅ AWS ECS Fargate with CloudFormation
+- ✅ Google Cloud Run deployment support
+- ✅ Standalone binary with systemd and Nginx
+- ✅ Terraform IaC for AWS, Azure, and GCP
+- ✅ Bitbucket Data Center SCM integration (4th provider)
+- ✅ API key rotation and lifecycle management
+- ✅ Enhanced storage configuration variables in all Terraform modules
 
-### Next: Phase 7 - Documentation & Testing (Sessions 20-22)
+### Current: Phase 7 - Documentation & Testing (Sessions 26-28)
 
+- Unit and integration tests for backend (target 80%+ coverage)
+- E2E tests for critical user flows
 - Comprehensive API documentation
-- Unit and integration tests (80%+ coverage)
-- End-to-end test suite
-- Performance benchmarks
+- Deployment guides for all platforms
+- Troubleshooting and FAQ documentation
 
-### Future Phases
+### Next: Phase 8 - Production Polish (Sessions 29-32)
 
-- Phase 8: Production polish (monitoring, observability, security hardening)
-- Phase 5B: Azure DevOps Extension (deferred based on demand)
+- OpenTelemetry instrumentation and Prometheus metrics
+- Grafana dashboards
+- Email alerts for API key expiration
+- Performance optimization and benchmarks
+- Security hardening review
+- Open source license attribution audit
 
 ## 🤝 Contributing
 
@@ -372,7 +426,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📊 Project Status
 
-**Current Version:** 0.9.0 (Session 15 Complete)
+**Current Version:** 1.0.0 (Session 25 Complete - Phase 6 Complete)
 
 **Implementation Progress:**
 
@@ -381,12 +435,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - ✅ Phase 3: Provider Registry & Network Mirror (100%)
 - ✅ Phase 4: Authentication & Authorization (100%)
 - ✅ Phase 5: Frontend SPA (100%)
-- ✅ Phase 5A: SCM Integration (100%)
+- ✅ Phase 5A: SCM Integration (100%) - GitHub, Azure DevOps, GitLab, Bitbucket Data Center
 - ✅ Phase 5C: Provider Network Mirroring (100%)
-- 📋 Phase 5B: Azure DevOps Extension (Deferred)
-- 📋 Phase 6: Additional Storage & Deployment (Next)
-- 📋 Phase 7: Documentation & Testing (Planned)
+- ✅ Phase 6: Storage Backends & Deployment (100%) - All 4 storage backends, 7 deployment options
+- 📋 Phase 7: Documentation & Testing (In Progress)
 - 📋 Phase 8: Production Polish (Planned)
+- 📋 Phase 5B: Azure DevOps Extension (Deferred)
 
 ---
 

@@ -29,6 +29,18 @@ func NewUserHandlers(cfg *config.Config, db *sql.DB) *UserHandlers {
 	}
 }
 
+// @Summary      List users
+// @Description  Get a paginated list of all users with their organization role templates. Requires users:read scope.
+// @Tags         Users
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        page      query  int  false  "Page number (default 1)"
+// @Param        per_page  query  int  false  "Items per page, max 100 (default 20)"
+// @Success      200  {object}  map[string]interface{}  "users: []models.User, pagination: map"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/users [get]
 // ListUsersHandler lists all users with pagination
 // GET /api/v1/users?page=1&per_page=20
 func (h *UserHandlers) ListUsersHandler() gin.HandlerFunc {
@@ -66,6 +78,17 @@ func (h *UserHandlers) ListUsersHandler() gin.HandlerFunc {
 	}
 }
 
+// @Summary      Get user
+// @Description  Get a user by ID with their organization memberships. Requires users:read scope.
+// @Tags         Users
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "User ID"
+// @Success      200  {object}  map[string]interface{}  "user: models.User, organizations: []models.Organization"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "User not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/users/{id} [get]
 // GetUserHandler retrieves a specific user by ID
 // GET /api/v1/users/:id
 func (h *UserHandlers) GetUserHandler() gin.HandlerFunc {
@@ -110,6 +133,19 @@ type CreateUserRequest struct {
 	OIDCSub *string `json:"oidc_sub"`
 }
 
+// @Summary      Create user
+// @Description  Create a new user. Typically users are created via OIDC; this endpoint is for admin use. Requires users:write scope.
+// @Tags         Users
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        body  body  CreateUserRequest  true  "User creation request"
+// @Success      201  {object}  map[string]interface{}  "user: models.User"
+// @Failure      400  {object}  map[string]interface{}  "Invalid request"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      409  {object}  map[string]interface{}  "User with this email already exists"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/users [post]
 // CreateUserHandler creates a new user (admin only, typically users are created via OIDC)
 // POST /api/v1/users
 func (h *UserHandlers) CreateUserHandler() gin.HandlerFunc {
@@ -165,6 +201,21 @@ type UpdateUserRequest struct {
 	Email *string `json:"email,omitempty"`
 }
 
+// @Summary      Update user
+// @Description  Update a user's name or email. Requires users:write scope.
+// @Tags         Users
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string             true  "User ID"
+// @Param        body  body  UpdateUserRequest  true  "User update request"
+// @Success      200  {object}  map[string]interface{}  "user: models.User"
+// @Failure      400  {object}  map[string]interface{}  "Invalid request"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "User not found"
+// @Failure      409  {object}  map[string]interface{}  "Email already in use by another user"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/users/{id} [put]
 // UpdateUserHandler updates a user
 // PUT /api/v1/users/:id
 func (h *UserHandlers) UpdateUserHandler() gin.HandlerFunc {
@@ -234,6 +285,17 @@ func (h *UserHandlers) UpdateUserHandler() gin.HandlerFunc {
 	}
 }
 
+// @Summary      Delete user
+// @Description  Delete a user by ID. Cascading deletes will handle related records. Requires users:write scope.
+// @Tags         Users
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "User ID"
+// @Success      200  {object}  map[string]interface{}  "message: User deleted successfully"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "User not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/users/{id} [delete]
 // DeleteUserHandler deletes a user
 // DELETE /api/v1/users/:id
 func (h *UserHandlers) DeleteUserHandler() gin.HandlerFunc {
@@ -270,6 +332,19 @@ func (h *UserHandlers) DeleteUserHandler() gin.HandlerFunc {
 	}
 }
 
+// @Summary      Search users
+// @Description  Search users by email or name. Requires users:read scope.
+// @Tags         Users
+// @Security     Bearer
+// @Produce      json
+// @Param        q         query  string  true   "Search query"
+// @Param        page      query  int     false  "Page number (default 1)"
+// @Param        per_page  query  int     false  "Items per page, max 100 (default 20)"
+// @Success      200  {object}  map[string]interface{}  "users: []models.User, pagination: map"
+// @Failure      400  {object}  map[string]interface{}  "Search query is required"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/users/search [get]
 // SearchUsersHandler searches users by email or name
 // GET /api/v1/users/search?q=query&page=1&per_page=20
 func (h *UserHandlers) SearchUsersHandler() gin.HandlerFunc {
@@ -314,6 +389,15 @@ func (h *UserHandlers) SearchUsersHandler() gin.HandlerFunc {
 	}
 }
 
+// @Summary      Get current user memberships
+// @Description  Get the organization memberships for the currently authenticated user. No special scopes required.
+// @Tags         Users
+// @Security     Bearer
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}  "memberships: []models.OrganizationMembership"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/users/me/memberships [get]
 // GetCurrentUserMembershipsHandler retrieves organization memberships for the current authenticated user
 // GET /api/v1/users/me/memberships
 // This endpoint allows any authenticated user to view their own memberships without special scopes
@@ -351,6 +435,17 @@ func (h *UserHandlers) GetCurrentUserMembershipsHandler() gin.HandlerFunc {
 	}
 }
 
+// @Summary      Get user memberships
+// @Description  Get the organization memberships for a specific user. Requires users:read scope.
+// @Tags         Users
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "User ID"
+// @Success      200  {object}  map[string]interface{}  "memberships: []models.OrganizationMembership"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "User not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/users/{id}/memberships [get]
 // GetUserMembershipsHandler retrieves organization memberships for a user
 // GET /api/v1/users/:id/memberships
 // Requires users:read scope (use /users/me/memberships for self-access)

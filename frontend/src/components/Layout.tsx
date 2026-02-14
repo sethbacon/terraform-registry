@@ -36,6 +36,7 @@ import {
   Brightness7,
   Shield,
   Storage,
+  Description,
 } from '@mui/icons-material';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -81,6 +82,7 @@ const Layout = () => {
     { text: 'Home', icon: <Home />, path: '/' },
     { text: 'Modules', icon: <ViewModule />, path: '/modules' },
     { text: 'Providers', icon: <Extension />, path: '/providers' },
+    { text: 'API Docs', icon: <Description />, path: '/api-docs' },
   ];
 
   // Admin items with required scopes - items only shown if user has the scope

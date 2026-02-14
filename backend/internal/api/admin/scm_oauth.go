@@ -33,6 +33,18 @@ func NewSCMOAuthHandlers(cfg *config.Config, scmRepo *repositories.SCMRepository
 	}
 }
 
+// @Summary      Initiate SCM OAuth
+// @Description  Start the OAuth authorization flow for an SCM provider. Returns the authorization URL to redirect the user to. For PAT-based providers, returns guidance on using POST /token instead.
+// @Tags         SCM OAuth
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "SCM provider ID (UUID)"
+// @Success      200  {object}  map[string]interface{}  "authorization_url: string, state: string"
+// @Failure      400  {object}  map[string]interface{}  "Invalid provider ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Provider not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/scm-providers/{id}/oauth/authorize [get]
 // InitiateOAuth starts the OAuth flow for an SCM provider
 // GET /api/v1/scm-providers/:id/oauth/authorize
 func (h *SCMOAuthHandlers) InitiateOAuth(c *gin.Context) {
@@ -108,6 +120,18 @@ func (h *SCMOAuthHandlers) InitiateOAuth(c *gin.Context) {
 	})
 }
 
+// @Summary      SCM OAuth callback
+// @Description  Processes the OAuth callback from the SCM provider, exchanges the code for tokens, stores them, and redirects to the frontend success page.
+// @Tags         SCM OAuth
+// @Produce      json
+// @Param        id     path   string  true  "SCM provider ID (UUID)"
+// @Param        code   query  string  true  "Authorization code from SCM provider"
+// @Param        state  query  string  true  "State parameter (userID:providerID)"
+// @Success      302    "Redirect to frontend success page"
+// @Failure      400  {object}  map[string]interface{}  "Invalid provider ID, code, or state"
+// @Failure      404  {object}  map[string]interface{}  "Provider not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/scm-providers/{id}/oauth/callback [get]
 // HandleOAuthCallback processes the OAuth callback
 // GET /api/v1/scm-providers/:id/oauth/callback
 func (h *SCMOAuthHandlers) HandleOAuthCallback(c *gin.Context) {
@@ -248,6 +272,17 @@ func (h *SCMOAuthHandlers) HandleOAuthCallback(c *gin.Context) {
 	c.Redirect(http.StatusFound, redirectURL)
 }
 
+// @Summary      Revoke SCM OAuth token
+// @Description  Revoke and delete the current user's OAuth or PAT token for an SCM provider.
+// @Tags         SCM OAuth
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "SCM provider ID (UUID)"
+// @Success      200  {object}  map[string]interface{}  "message: OAuth token revoked"
+// @Failure      400  {object}  map[string]interface{}  "Invalid provider ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/scm-providers/{id}/oauth/token [delete]
 // RevokeOAuth revokes a user's OAuth token for a provider
 // DELETE /api/v1/scm-providers/:id/oauth/token
 func (h *SCMOAuthHandlers) RevokeOAuth(c *gin.Context) {
@@ -273,6 +308,18 @@ func (h *SCMOAuthHandlers) RevokeOAuth(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "OAuth token revoked"})
 }
 
+// @Summary      Refresh SCM OAuth token
+// @Description  Manually trigger a refresh of the current user's OAuth token for an SCM provider using the stored refresh token.
+// @Tags         SCM OAuth
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "SCM provider ID (UUID)"
+// @Success      200  {object}  map[string]interface{}  "message: token refreshed, expires_at: time"
+// @Failure      400  {object}  map[string]interface{}  "Invalid provider ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Token or provider not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/scm-providers/{id}/oauth/refresh [post]
 // RefreshToken manually refreshes an OAuth token
 // POST /api/v1/scm-providers/:id/oauth/refresh
 func (h *SCMOAuthHandlers) RefreshToken(c *gin.Context) {
@@ -388,6 +435,20 @@ func (h *SCMOAuthHandlers) RefreshToken(c *gin.Context) {
 	})
 }
 
+// @Summary      Save SCM Personal Access Token
+// @Description  Store a Personal Access Token for a PAT-based SCM provider (e.g. Bitbucket Data Center).
+// @Tags         SCM OAuth
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string  true  "SCM provider ID (UUID)"
+// @Param        body  body  object  true  "access_token: string"
+// @Success      200  {object}  map[string]interface{}  "message: Personal Access Token saved successfully"
+// @Failure      400  {object}  map[string]interface{}  "Invalid provider ID, request, or not a PAT provider"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Provider not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/scm-providers/{id}/token [post]
 // SavePATToken stores a Personal Access Token for a PAT-based SCM provider
 // POST /api/v1/scm-providers/:id/token
 func (h *SCMOAuthHandlers) SavePATToken(c *gin.Context) {
@@ -466,6 +527,17 @@ func (h *SCMOAuthHandlers) SavePATToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Personal Access Token saved successfully"})
 }
 
+// @Summary      Get SCM token status
+// @Description  Returns whether the current user is connected to an SCM provider and token metadata (without exposing the token itself).
+// @Tags         SCM OAuth
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "SCM provider ID (UUID)"
+// @Success      200  {object}  map[string]interface{}  "connected: bool, connected_at: time, expires_at: time, token_type: string"
+// @Failure      400  {object}  map[string]interface{}  "Invalid provider ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/scm-providers/{id}/oauth/token [get]
 // GetTokenStatus returns the OAuth connection status for the current user and a provider
 // GET /api/v1/scm-providers/:id/oauth/token
 func (h *SCMOAuthHandlers) GetTokenStatus(c *gin.Context) {
@@ -505,6 +577,19 @@ func (h *SCMOAuthHandlers) GetTokenStatus(c *gin.Context) {
 	})
 }
 
+// @Summary      List SCM repositories
+// @Description  List repositories available to the current user from an SCM provider. Optionally search by name.
+// @Tags         SCM OAuth
+// @Security     Bearer
+// @Produce      json
+// @Param        id      path   string  true   "SCM provider ID (UUID)"
+// @Param        search  query  string  false  "Search query to filter repositories by name"
+// @Success      200  {object}  map[string]interface{}  "repositories: [{id, name, full_name, owner, ...}]"
+// @Failure      400  {object}  map[string]interface{}  "Invalid provider ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized or not connected to provider"
+// @Failure      404  {object}  map[string]interface{}  "Provider not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/scm-providers/{id}/repositories [get]
 // ListRepositories lists repositories from the SCM provider
 // GET /api/v1/scm-providers/:id/repositories
 func (h *SCMOAuthHandlers) ListRepositories(c *gin.Context) {

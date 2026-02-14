@@ -29,6 +29,13 @@ func NewStorageHandlers(cfg *config.Config, storageConfigRepo *repositories.Stor
 	}
 }
 
+// @Summary      Get setup status
+// @Description  Returns whether storage has been configured and initial setup is required. No authentication required.
+// @Tags         Storage
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}  "storage_configured: bool, setup_required: bool"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/setup/status [get]
 // GetSetupStatus returns the current setup status
 // GET /api/v1/setup/status
 func (h *StorageHandlers) GetSetupStatus(c *gin.Context) {
@@ -58,6 +65,16 @@ func (h *StorageHandlers) GetSetupStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// @Summary      Get active storage configuration
+// @Description  Returns the currently active storage configuration (credentials redacted). Requires admin scope.
+// @Tags         Storage
+// @Security     Bearer
+// @Produce      json
+// @Success      200  {object}  models.StorageConfigResponse
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "No active storage configuration"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/storage/config [get]
 // GetActiveStorageConfig returns the currently active storage configuration
 // GET /api/v1/storage/config
 func (h *StorageHandlers) GetActiveStorageConfig(c *gin.Context) {
@@ -77,6 +94,15 @@ func (h *StorageHandlers) GetActiveStorageConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, storageConfig.ToResponse())
 }
 
+// @Summary      List storage configurations
+// @Description  Returns all storage configurations (credentials redacted). Requires admin scope.
+// @Tags         Storage
+// @Security     Bearer
+// @Produce      json
+// @Success      200  {array}   models.StorageConfigResponse
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/storage/configs [get]
 // ListStorageConfigs lists all storage configurations
 // GET /api/v1/storage/configs
 func (h *StorageHandlers) ListStorageConfigs(c *gin.Context) {
@@ -96,6 +122,18 @@ func (h *StorageHandlers) ListStorageConfigs(c *gin.Context) {
 	c.JSON(http.StatusOK, responses)
 }
 
+// @Summary      Get storage configuration
+// @Description  Returns a specific storage configuration by ID (credentials redacted). Requires admin scope.
+// @Tags         Storage
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Configuration ID (UUID)"
+// @Success      200  {object}  models.StorageConfigResponse
+// @Failure      400  {object}  map[string]interface{}  "Invalid configuration ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Storage configuration not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/storage/configs/{id} [get]
 // GetStorageConfig returns a storage configuration by ID
 // GET /api/v1/storage/configs/:id
 func (h *StorageHandlers) GetStorageConfig(c *gin.Context) {
@@ -122,6 +160,18 @@ func (h *StorageHandlers) GetStorageConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, storageConfig.ToResponse())
 }
 
+// @Summary      Create storage configuration
+// @Description  Create a new storage configuration. Supported backends: local, azure, s3, gcs. Requires admin scope.
+// @Tags         Storage
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        body  body  models.StorageConfigInput  true  "Storage configuration"
+// @Success      201  {object}  models.StorageConfigResponse
+// @Failure      400  {object}  map[string]interface{}  "Invalid request or validation error"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/storage/configs [post]
 // CreateStorageConfig creates a new storage configuration
 // POST /api/v1/storage/configs
 func (h *StorageHandlers) CreateStorageConfig(c *gin.Context) {
@@ -192,6 +242,20 @@ func (h *StorageHandlers) CreateStorageConfig(c *gin.Context) {
 	c.JSON(http.StatusCreated, storageConfig.ToResponse())
 }
 
+// @Summary      Update storage configuration
+// @Description  Update a storage configuration. Cannot change backend_type of the active configuration. Requires admin scope.
+// @Tags         Storage
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string                    true  "Configuration ID (UUID)"
+// @Param        body  body  models.StorageConfigInput  true  "Storage configuration"
+// @Success      200  {object}  models.StorageConfigResponse
+// @Failure      400  {object}  map[string]interface{}  "Invalid request or validation error"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Storage configuration not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/storage/configs/{id} [put]
 // UpdateStorageConfig updates a storage configuration
 // PUT /api/v1/storage/configs/:id
 func (h *StorageHandlers) UpdateStorageConfig(c *gin.Context) {
@@ -266,6 +330,18 @@ func (h *StorageHandlers) UpdateStorageConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, existing.ToResponse())
 }
 
+// @Summary      Delete storage configuration
+// @Description  Delete a storage configuration. Cannot delete the active configuration. Requires admin scope.
+// @Tags         Storage
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Configuration ID (UUID)"
+// @Success      200  {object}  map[string]interface{}  "message: storage configuration deleted"
+// @Failure      400  {object}  map[string]interface{}  "Invalid ID or cannot delete active config"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Storage configuration not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/storage/configs/{id} [delete]
 // DeleteStorageConfig deletes a storage configuration
 // DELETE /api/v1/storage/configs/:id
 func (h *StorageHandlers) DeleteStorageConfig(c *gin.Context) {
@@ -303,6 +379,18 @@ func (h *StorageHandlers) DeleteStorageConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "storage configuration deleted"})
 }
 
+// @Summary      Activate storage configuration
+// @Description  Set a storage configuration as the active one. All other configurations will be deactivated. Requires admin scope.
+// @Tags         Storage
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Configuration ID (UUID)"
+// @Success      200  {object}  map[string]interface{}  "message: string, config: models.StorageConfigResponse"
+// @Failure      400  {object}  map[string]interface{}  "Invalid configuration ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Storage configuration not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/storage/configs/{id}/activate [post]
 // ActivateStorageConfig activates a storage configuration
 // POST /api/v1/storage/configs/:id/activate
 func (h *StorageHandlers) ActivateStorageConfig(c *gin.Context) {
@@ -349,6 +437,18 @@ func (h *StorageHandlers) ActivateStorageConfig(c *gin.Context) {
 	})
 }
 
+// @Summary      Test storage configuration
+// @Description  Validate a storage configuration without saving it. Requires admin scope.
+// @Tags         Storage
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        body  body  models.StorageConfigInput  true  "Storage configuration to test"
+// @Success      200  {object}  map[string]interface{}  "success: bool, message: string"
+// @Failure      400  {object}  map[string]interface{}  "Invalid request or validation error"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/storage/configs/test [post]
 // TestStorageConfig tests a storage configuration without saving
 // POST /api/v1/storage/configs/test
 func (h *StorageHandlers) TestStorageConfig(c *gin.Context) {

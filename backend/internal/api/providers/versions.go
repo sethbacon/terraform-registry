@@ -10,6 +10,16 @@ import (
 	"github.com/terraform-registry/terraform-registry/internal/db/repositories"
 )
 
+// @Summary      List provider versions
+// @Description  List all available versions and platforms for a specific provider. Implements the Terraform Provider Registry Protocol.
+// @Tags         Providers
+// @Produce      json
+// @Param        namespace  path  string  true  "Provider namespace"
+// @Param        type       path  string  true  "Provider type (e.g. aws, azurerm)"
+// @Success      200  {object}  map[string]interface{}  "versions: [{version, protocols, platforms, ...}]"
+// @Failure      404  {object}  map[string]interface{}  "Provider not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /v1/providers/{namespace}/{type}/versions [get]
 // ListVersionsHandler handles listing all versions of a provider
 // Implements: GET /v1/providers/:namespace/:type/versions
 func ListVersionsHandler(db *sql.DB, cfg *config.Config) gin.HandlerFunc {

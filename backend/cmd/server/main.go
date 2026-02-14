@@ -1,3 +1,16 @@
+// @title           Terraform Registry API
+// @version         1.0.0
+// @description     Complete Terraform Module and Provider Registry with SCM integration, mirrors, and storage backends
+// @termsOfService  https://registry.terraform.io/terms
+// @contact.name    Support
+// @contact.email   support@example.com
+// @license.name    MPL-2.0
+// @basePath        /
+// @schemes         http https
+// @securityDefinitions.apiKey  Bearer
+// @in                          header
+// @name                         Authorization
+// @description                  "JWT token or API key. For JWT: 'Bearer {token}'. For API Key: 'Bearer {api_key}'"
 package main
 
 import (

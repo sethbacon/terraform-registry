@@ -2,7 +2,11 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -10,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
+	"github.com/terraform-registry/terraform-registry/docs"
 	"github.com/terraform-registry/terraform-registry/internal/api/admin"
 	"github.com/terraform-registry/terraform-registry/internal/api/mirror"
 	"github.com/terraform-registry/terraform-registry/internal/api/modules"
@@ -94,6 +99,146 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 
 	// API version
 	router.GET("/version", versionHandler())
+
+	// Swagger UI - serve from CDN
+	serveSwaggerUI := func(c *gin.Context) {
+		// Generate a per-request nonce for CSP
+		nb := make([]byte, 16)
+		if _, err := rand.Read(nb); err != nil {
+			c.String(http.StatusInternalServerError, "failed to generate nonce")
+			return
+		}
+		nonce := base64.StdEncoding.EncodeToString(nb)
+
+		// Allow same-origin framing so the frontend React app can embed this page
+		c.Header("X-Frame-Options", "SAMEORIGIN")
+
+		// Set a nonce-based Content Security Policy allowing the generated
+		// nonce for inline scripts and styles. This is safe for serving the
+		// Swagger UI page while keeping the global API CSP strict.
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		c.Header("Content-Security-Policy", fmt.Sprintf(
+			"default-src 'self' https:; script-src 'self' 'nonce-%s' https:; style-src 'self' 'nonce-%s' https:; img-src 'self' data: https:; font-src 'self' https:; connect-src 'self' https:",
+			nonce, nonce,
+		))
+
+		html := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+	<head>
+		<title>Swagger UI</title>
+		<meta charset="utf-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui.min.css">
+		<style nonce="%s">
+			html{
+				box-sizing: border-box;
+				overflow: -moz-scrollbars-vertical;
+				overflow-y: scroll;
+			}
+			*,
+			*:before,
+			*:after{
+				box-sizing: inherit;
+			}
+			body {@font-family: sans-serif;
+				color: #fafafa;
+			}
+		</style>
+	</head>
+
+	<body>
+		<div id="swagger-ui"></div>
+
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-bundle.min.js" crossorigin></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-standalone-preset.min.js" crossorigin></script>
+		<script nonce="%s">
+		window.onload = function() {
+			const ui = SwaggerUIBundle({
+				url: "/swagger.json",
+				dom_id: '#swagger-ui',
+				deepLinking: true,
+				presets: [
+					SwaggerUIBundle.presets.apis,
+					SwaggerUIBundle.SwaggerUIStandalonePreset
+				],
+				plugins: [
+					SwaggerUIBundle.plugins.DownloadUrl
+				],
+				layout: "BaseLayout",
+				docExpansion: "list"
+			})
+			window.ui = ui
+		}
+	</script>
+	</body>
+</html>`, nonce, nonce)
+
+		c.Data(200, "text/html; charset=utf-8", []byte(html))
+	}
+
+	// Register both exact and trailing-slash routes for Swagger UI
+	router.GET("/api-docs/index.html", serveSwaggerUI)
+	router.GET("/api-docs/", serveSwaggerUI)
+	// Redirect /api-docs -> /api-docs/
+	router.GET("/api-docs", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/api-docs/")
+	})
+
+	// Raw Swagger JSON endpoint - serve embedded spec with runtime metadata
+	router.GET("/swagger.json", func(c *gin.Context) {
+		c.Header("Content-Type", "application/json")
+		c.Header("Access-Control-Allow-Origin", "*")
+
+		data := docs.SwaggerJSON
+
+		// Unmarshal to a generic map so we can override the info fields
+		var doc map[string]interface{}
+		if err := json.Unmarshal(data, &doc); err != nil {
+			log.Printf("failed to unmarshal swagger.json: %v", err)
+			c.Data(http.StatusOK, "application/json", data)
+			return
+		}
+
+		// Ensure info object exists
+		info, _ := doc["info"].(map[string]interface{})
+		if info == nil {
+			info = map[string]interface{}{}
+			doc["info"] = info
+		}
+
+		// Inject configured metadata if provided
+		if cfg.ApiDocs.TermsOfService != "" {
+			info["termsOfService"] = cfg.ApiDocs.TermsOfService
+		}
+		// Contact
+		contact, _ := info["contact"].(map[string]interface{})
+		if contact == nil {
+			contact = map[string]interface{}{}
+			info["contact"] = contact
+		}
+		if cfg.ApiDocs.ContactName != "" {
+			contact["name"] = cfg.ApiDocs.ContactName
+		}
+		if cfg.ApiDocs.ContactEmail != "" {
+			contact["email"] = cfg.ApiDocs.ContactEmail
+		}
+
+		// License
+		if cfg.ApiDocs.License != "" {
+			license := map[string]interface{}{"name": cfg.ApiDocs.License}
+			info["license"] = license
+		}
+
+		// Marshal back to JSON and return
+		out, err := json.Marshal(doc)
+		if err != nil {
+			log.Printf("failed to marshal modified swagger.json: %v", err)
+			c.Data(http.StatusOK, "application/json", data)
+			return
+		}
+
+		c.Data(http.StatusOK, "application/json", out)
+	})
 
 	// Module Registry endpoints (v1) - Terraform Protocol
 	// These are public endpoints that support optional authentication
@@ -424,6 +569,13 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 	return router
 }
 
+// @Summary      Health check
+// @Description  Returns the health status of the service, including database connectivity.
+// @Tags         System
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}  "status: healthy, time: RFC3339 timestamp"
+// @Failure      503  {object}  map[string]interface{}  "status: unhealthy, error: database connection failed"
+// @Router       /health [get]
 // healthCheckHandler returns the health status of the service
 func healthCheckHandler(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -443,6 +595,13 @@ func healthCheckHandler(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// @Summary      Readiness check
+// @Description  Returns whether the service is ready to accept traffic. Checks database connectivity.
+// @Tags         System
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}  "ready: true, time: RFC3339 timestamp"
+// @Failure      503  {object}  map[string]interface{}  "ready: false, error: database not ready"
+// @Router       /ready [get]
 // readinessHandler returns the readiness status of the service
 func readinessHandler(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -462,6 +621,12 @@ func readinessHandler(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// @Summary      Terraform service discovery
+// @Description  Implements the Terraform service discovery protocol. Returns the base URLs for the Module Registry and Provider Registry endpoints.
+// @Tags         System
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}  "modules.v1: URL, providers.v1: URL"
+// @Router       /.well-known/terraform.json [get]
 // serviceDiscoveryHandler implements Terraform service discovery
 func serviceDiscoveryHandler(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -472,6 +637,12 @@ func serviceDiscoveryHandler(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
+// @Summary      API version
+// @Description  Returns the current API version and supported protocol versions.
+// @Tags         System
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}  "version, api_version, protocols: {modules, providers, mirror}"
+// @Router       /version [get]
 // versionHandler returns the API version
 func versionHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {

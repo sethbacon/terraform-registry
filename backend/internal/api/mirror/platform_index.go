@@ -15,6 +15,19 @@ import (
 	"github.com/terraform-registry/terraform-registry/internal/validation"
 )
 
+// @Summary      Network mirror provider platform index
+// @Description  Returns download URLs and hashes for all platforms of a specific provider version, per the Terraform Network Mirror Protocol.
+// @Tags         Mirror Protocol
+// @Produce      json
+// @Param        hostname     path  string  true  "Origin registry hostname (e.g. registry.terraform.io)"
+// @Param        namespace    path  string  true  "Provider namespace"
+// @Param        type         path  string  true  "Provider type (e.g. aws, azurerm)"
+// @Param        versionfile  path  string  true  "Version with .json suffix (e.g. 1.2.3.json)"
+// @Success      200  {object}  map[string]interface{}  "archives: {\"linux_amd64\": {url, hashes}}"
+// @Failure      400  {object}  map[string]interface{}  "Invalid version format"
+// @Failure      404  {object}  map[string]interface{}  "Provider or version not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /terraform/providers/{hostname}/{namespace}/{type}/{versionfile} [get]
 // PlatformIndexHandler handles network mirror platform index requests
 // Implements: GET /terraform/providers/:hostname/:namespace/:type/:version.json
 // Returns download URLs and hashes for all platforms of a specific version

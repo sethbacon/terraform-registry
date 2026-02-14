@@ -53,11 +53,23 @@ type CreateAPIKeyResponse struct {
 	CreatedAt   time.Time  `json:"created_at"`
 }
 
+// @Summary      List API keys
+// @Description  List API keys with optional filtering by organization. Users with api_keys:manage scope can view all keys in an organization, otherwise only their own keys are visible.
+// @Tags         API Keys
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        organization_id  query  string  false  "Filter by organization ID (optional)"
+// @Success      200  {object}  map[string]interface{}  "List of API keys"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized - user not authenticated"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/apikeys [get]
 // ListAPIKeysHandler lists API keys for the authenticated user
 // GET /api/v1/apikeys
 // If organization_id is provided:
 //   - Users with api_keys:manage scope see all keys in that org
 //   - Otherwise, users only see their own keys in that org
+//
 // If no organization_id: returns only the user's own keys across all orgs
 func (h *APIKeyHandlers) ListAPIKeysHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -155,6 +167,19 @@ func (h *APIKeyHandlers) ListAPIKeysHandler() gin.HandlerFunc {
 	}
 }
 
+// @Summary      Create API key
+// @Description  Create a new API key with specified scopes. The full API key is only returned once during creation.
+// @Tags         API Keys
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        body  body  CreateAPIKeyRequest  true  "API key creation request"
+// @Success      201  {object}  CreateAPIKeyResponse  "API key created successfully (full key returned once)"
+// @Failure      400  {object}  map[string]interface{}  "Invalid request or scopes"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized - user not authenticated"
+// @Failure      403  {object}  map[string]interface{}  "Forbidden - no role or scopes exceed permissions"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/apikeys [post]
 // CreateAPIKeyHandler creates a new API key
 // POST /api/v1/apikeys
 func (h *APIKeyHandlers) CreateAPIKeyHandler() gin.HandlerFunc {
@@ -320,6 +345,19 @@ func (h *APIKeyHandlers) CreateAPIKeyHandler() gin.HandlerFunc {
 	}
 }
 
+// @Summary      Get API key
+// @Description  Retrieve a specific API key by ID. Users can only access their own keys unless they have admin scope.
+// @Tags         API Keys
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id  path  string  true  "API key ID"
+// @Success      200  {object}  map[string]interface{}  "API key details"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized - user not authenticated"
+// @Failure      403  {object}  map[string]interface{}  "Forbidden - access denied to this key"
+// @Failure      404  {object}  map[string]interface{}  "API key not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/apikeys/{id} [get]
 // GetAPIKeyHandler retrieves a specific API key
 // GET /api/v1/apikeys/:id
 func (h *APIKeyHandlers) GetAPIKeyHandler() gin.HandlerFunc {
@@ -364,6 +402,19 @@ func (h *APIKeyHandlers) GetAPIKeyHandler() gin.HandlerFunc {
 	}
 }
 
+// @Summary      Delete API key
+// @Description  Delete a specific API key by ID. Users can only delete their own keys unless they have admin scope.
+// @Tags         API Keys
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id  path  string  true  "API key ID"
+// @Success      200  {object}  map[string]interface{}  "Deletion confirmation"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized - user not authenticated"
+// @Failure      403  {object}  map[string]interface{}  "Forbidden - access denied to this key"
+// @Failure      404  {object}  map[string]interface{}  "API key not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/apikeys/{id} [delete]
 // DeleteAPIKeyHandler deletes an API key
 // DELETE /api/v1/apikeys/:id
 func (h *APIKeyHandlers) DeleteAPIKeyHandler() gin.HandlerFunc {
@@ -416,6 +467,21 @@ func (h *APIKeyHandlers) DeleteAPIKeyHandler() gin.HandlerFunc {
 	}
 }
 
+// @Summary      Update API key
+// @Description  Update an API key's name, scopes, or expiration. Users can only update their own keys unless they have admin scope.
+// @Tags         API Keys
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string      true  "API key ID"
+// @Param        body  body  object      true  "Update request with optional name, scopes, and expires_at fields"
+// @Success      200  {object}  map[string]interface{}  "Updated API key details"
+// @Failure      400  {object}  map[string]interface{}  "Invalid request or scopes"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized - user not authenticated"
+// @Failure      403  {object}  map[string]interface{}  "Forbidden - access denied or scopes exceed permissions"
+// @Failure      404  {object}  map[string]interface{}  "API key not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/apikeys/{id} [put]
 // UpdateAPIKeyHandler updates an API key (name, scopes, expiration)
 // PUT /api/v1/apikeys/:id
 func (h *APIKeyHandlers) UpdateAPIKeyHandler() gin.HandlerFunc {
@@ -558,6 +624,21 @@ type RotateAPIKeyResponse struct {
 	OldExpiresAt *time.Time           `json:"old_expires_at,omitempty"`
 }
 
+// @Summary      Rotate API key
+// @Description  Rotate an API key by creating a new key and optionally scheduling the old key's expiration. Users can only rotate their own keys unless they have admin scope.
+// @Tags         API Keys
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string                  true  "API key ID"
+// @Param        body  body  RotateAPIKeyRequest     true  "Rotation request with optional grace period (0-72 hours)"
+// @Success      200  {object}  RotateAPIKeyResponse  "New API key and old key status"
+// @Failure      400  {object}  map[string]interface{}  "Invalid grace period (must be 0-72 hours)"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized - user not authenticated"
+// @Failure      403  {object}  map[string]interface{}  "Forbidden - access denied to this key"
+// @Failure      404  {object}  map[string]interface{}  "API key not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/apikeys/{id}/rotate [post]
 // RotateAPIKeyHandler rotates an API key - creates a new key and optionally schedules old key expiration
 // POST /api/v1/apikeys/:id/rotate
 func (h *APIKeyHandlers) RotateAPIKeyHandler() gin.HandlerFunc {

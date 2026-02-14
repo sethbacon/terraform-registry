@@ -28,6 +28,17 @@ func NewOrganizationHandlers(cfg *config.Config, db *sql.DB) *OrganizationHandle
 	}
 }
 
+// @Summary      List organizations
+// @Description  Get a paginated list of all organizations.
+// @Tags         Organizations
+// @Security     Bearer
+// @Produce      json
+// @Param        page      query  int  false  "Page number (default 1)"
+// @Param        per_page  query  int  false  "Items per page, max 100 (default 20)"
+// @Success      200  {object}  map[string]interface{}  "organizations: []models.Organization, pagination: {page, per_page, total}"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/organizations [get]
 // ListOrganizationsHandler lists all organizations with pagination
 // GET /api/v1/organizations?page=1&per_page=20
 func (h *OrganizationHandlers) ListOrganizationsHandler() gin.HandlerFunc {
@@ -74,6 +85,17 @@ func (h *OrganizationHandlers) ListOrganizationsHandler() gin.HandlerFunc {
 	}
 }
 
+// @Summary      Get organization
+// @Description  Retrieve a specific organization by its ID, including member list.
+// @Tags         Organizations
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Organization ID"
+// @Success      200  {object}  map[string]interface{}  "organization: models.Organization, members: []models.Member"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Organization not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/organizations/{id} [get]
 // GetOrganizationHandler retrieves a specific organization by ID
 // GET /api/v1/organizations/:id
 func (h *OrganizationHandlers) GetOrganizationHandler() gin.HandlerFunc {
@@ -111,6 +133,17 @@ func (h *OrganizationHandlers) GetOrganizationHandler() gin.HandlerFunc {
 	}
 }
 
+// @Summary      List organization members
+// @Description  Retrieve all members of a specific organization including user details.
+// @Tags         Organizations
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Organization ID"
+// @Success      200  {object}  map[string]interface{}  "members: []models.OrganizationMember"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Organization not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/organizations/{id}/members [get]
 // ListMembersHandler retrieves all members of an organization with user details
 // GET /api/v1/organizations/:id/members
 func (h *OrganizationHandlers) ListMembersHandler() gin.HandlerFunc {
@@ -154,6 +187,19 @@ type CreateOrganizationRequest struct {
 	DisplayName string `json:"display_name" binding:"required"`
 }
 
+// @Summary      Create organization
+// @Description  Create a new organization in the registry.
+// @Tags         Organizations
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        body  body  CreateOrganizationRequest  true  "Organization name and display name"
+// @Success      201  {object}  map[string]interface{}  "organization: models.Organization"
+// @Failure      400  {object}  map[string]interface{}  "Invalid request body"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      409  {object}  map[string]interface{}  "Organization with this name already exists"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/organizations [post]
 // CreateOrganizationHandler creates a new organization
 // POST /api/v1/organizations
 func (h *OrganizationHandlers) CreateOrganizationHandler() gin.HandlerFunc {
@@ -206,6 +252,20 @@ type UpdateOrganizationRequest struct {
 	DisplayName *string `json:"display_name"`
 }
 
+// @Summary      Update organization
+// @Description  Update an existing organization's display name.
+// @Tags         Organizations
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string                    true  "Organization ID"
+// @Param        body  body  UpdateOrganizationRequest  true  "Fields to update"
+// @Success      200  {object}  map[string]interface{}  "organization: models.Organization"
+// @Failure      400  {object}  map[string]interface{}  "Invalid request body"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Organization not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/organizations/{id} [put]
 // UpdateOrganizationHandler updates an organization
 // PUT /api/v1/organizations/:id
 func (h *OrganizationHandlers) UpdateOrganizationHandler() gin.HandlerFunc {
@@ -255,6 +315,17 @@ func (h *OrganizationHandlers) UpdateOrganizationHandler() gin.HandlerFunc {
 	}
 }
 
+// @Summary      Delete organization
+// @Description  Remove an organization and its associated records.
+// @Tags         Organizations
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Organization ID"
+// @Success      200  {object}  map[string]interface{}  "message: Organization deleted successfully"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Organization not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/organizations/{id} [delete]
 // DeleteOrganizationHandler deletes an organization
 // DELETE /api/v1/organizations/:id
 func (h *OrganizationHandlers) DeleteOrganizationHandler() gin.HandlerFunc {
@@ -297,6 +368,21 @@ type AddMemberRequest struct {
 	RoleTemplateID *string `json:"role_template_id"` // Optional, UUID of role template
 }
 
+// @Summary      Add organization member
+// @Description  Add a user as a member to an organization, optionally assigning a role template.
+// @Tags         Organizations
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string          true  "Organization ID"
+// @Param        body  body  AddMemberRequest  true  "Member user_id and optional role_template_id"
+// @Success      201  {object}  map[string]interface{}  "member: models.OrganizationMember with role info"
+// @Failure      400  {object}  map[string]interface{}  "Invalid request"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Organization not found"
+// @Failure      409  {object}  map[string]interface{}  "User is already a member"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/organizations/{id}/members [post]
 // AddMemberHandler adds a member to an organization
 // POST /api/v1/organizations/:id/members
 func (h *OrganizationHandlers) AddMemberHandler() gin.HandlerFunc {
@@ -379,6 +465,21 @@ type UpdateMemberRequest struct {
 	RoleTemplateID *string `json:"role_template_id"` // UUID of role template, or null to clear
 }
 
+// @Summary      Update organization member
+// @Description  Update a member's role template within an organization.
+// @Tags         Organizations
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id       path  string               true  "Organization ID"
+// @Param        user_id  path  string               true  "User ID"
+// @Param        body     body  UpdateMemberRequest  true  "role_template_id (UUID or null to clear)"
+// @Success      200  {object}  map[string]interface{}  "member: models.OrganizationMember with role info"
+// @Failure      400  {object}  map[string]interface{}  "Invalid request"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Member not found in organization"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/organizations/{id}/members/{user_id} [put]
 // UpdateMemberHandler updates a member's role template in an organization
 // PUT /api/v1/organizations/:id/members/:user_id
 func (h *OrganizationHandlers) UpdateMemberHandler() gin.HandlerFunc {
@@ -435,6 +536,17 @@ func (h *OrganizationHandlers) UpdateMemberHandler() gin.HandlerFunc {
 	}
 }
 
+// @Summary      Remove organization member
+// @Description  Remove a user from an organization's membership.
+// @Tags         Organizations
+// @Security     Bearer
+// @Produce      json
+// @Param        id       path  string  true  "Organization ID"
+// @Param        user_id  path  string  true  "User ID"
+// @Success      200  {object}  map[string]interface{}  "message: Member removed successfully"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/organizations/{id}/members/{user_id} [delete]
 // RemoveMemberHandler removes a member from an organization
 // DELETE /api/v1/organizations/:id/members/:user_id
 func (h *OrganizationHandlers) RemoveMemberHandler() gin.HandlerFunc {
@@ -456,6 +568,19 @@ func (h *OrganizationHandlers) RemoveMemberHandler() gin.HandlerFunc {
 	}
 }
 
+// @Summary      Search organizations
+// @Description  Search organizations by name or display name with pagination.
+// @Tags         Organizations
+// @Security     Bearer
+// @Produce      json
+// @Param        q         query  string  true   "Search query"
+// @Param        page      query  int     false  "Page number (default 1)"
+// @Param        per_page  query  int     false  "Items per page, max 100 (default 20)"
+// @Success      200  {object}  map[string]interface{}  "organizations: []models.Organization, pagination: map"
+// @Failure      400  {object}  map[string]interface{}  "Search query is required"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/organizations/search [get]
 // SearchOrganizationsHandler searches organizations by name
 // GET /api/v1/organizations/search?q=query&page=1&per_page=20
 func (h *OrganizationHandlers) SearchOrganizationsHandler() gin.HandlerFunc {

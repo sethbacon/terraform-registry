@@ -13,6 +13,20 @@ import (
 	"github.com/terraform-registry/terraform-registry/internal/validation"
 )
 
+// @Summary      Download provider platform binary
+// @Description  Returns download URL, checksums, and signing key info for a specific provider platform. Implements the Terraform Provider Registry Protocol.
+// @Tags         Providers
+// @Produce      json
+// @Param        namespace  path  string  true  "Provider namespace"
+// @Param        type       path  string  true  "Provider type (e.g. aws, azurerm)"
+// @Param        version    path  string  true  "Semantic version (e.g. 1.2.3)"
+// @Param        os         path  string  true  "Target OS (e.g. linux, darwin, windows)"
+// @Param        arch       path  string  true  "Target architecture (e.g. amd64, arm64)"
+// @Success      200  {object}  map[string]interface{}  "download_url, shasums_url, shasum, protocols, signing_keys, ..."
+// @Failure      400  {object}  map[string]interface{}  "Invalid version or platform"
+// @Failure      404  {object}  map[string]interface{}  "Provider, version, or platform not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /v1/providers/{namespace}/{type}/{version}/download/{os}/{arch} [get]
 // DownloadHandler handles provider download requests
 // Implements: GET /v1/providers/:namespace/:type/:version/download/:os/:arch
 // Returns JSON with download URL, checksums, and signing keys

@@ -24,6 +24,15 @@ func NewRBACHandlers(rbacRepo *repositories.RBACRepository) *RBACHandlers {
 // Role Templates
 // ============================================================================
 
+// @Summary      List role templates
+// @Description  Returns all available RBAC role templates. Requires admin scope.
+// @Tags         RBAC
+// @Security     Bearer
+// @Produce      json
+// @Success      200  {array}   models.RoleTemplate
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/role-templates [get]
 // ListRoleTemplates returns all available role templates
 // GET /api/v1/admin/role-templates
 func (h *RBACHandlers) ListRoleTemplates(c *gin.Context) {
@@ -36,6 +45,18 @@ func (h *RBACHandlers) ListRoleTemplates(c *gin.Context) {
 	c.JSON(http.StatusOK, templates)
 }
 
+// @Summary      Get role template
+// @Description  Returns a specific role template by ID. Requires admin scope.
+// @Tags         RBAC
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Role template ID (UUID)"
+// @Success      200  {object}  models.RoleTemplate
+// @Failure      400  {object}  map[string]interface{}  "Invalid role template ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Role template not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/role-templates/{id} [get]
 // GetRoleTemplate returns a single role template
 // GET /api/v1/admin/role-templates/:id
 func (h *RBACHandlers) GetRoleTemplate(c *gin.Context) {
@@ -68,6 +89,19 @@ type CreateRoleTemplateRequest struct {
 	Scopes      []string `json:"scopes" binding:"required"`
 }
 
+// @Summary      Create role template
+// @Description  Create a new custom RBAC role template with specified scopes. Requires admin scope.
+// @Tags         RBAC
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        body  body  CreateRoleTemplateRequest  true  "Role template"
+// @Success      201  {object}  models.RoleTemplate
+// @Failure      400  {object}  map[string]interface{}  "Invalid request"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      409  {object}  map[string]interface{}  "Role template with this name already exists"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/role-templates [post]
 // CreateRoleTemplate creates a new role template
 // POST /api/v1/admin/role-templates
 func (h *RBACHandlers) CreateRoleTemplate(c *gin.Context) {
@@ -107,6 +141,21 @@ func (h *RBACHandlers) CreateRoleTemplate(c *gin.Context) {
 	c.JSON(http.StatusCreated, template)
 }
 
+// @Summary      Update role template
+// @Description  Update an existing custom role template. Cannot modify system role templates. Requires admin scope.
+// @Tags         RBAC
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string                    true  "Role template ID (UUID)"
+// @Param        body  body  CreateRoleTemplateRequest  true  "Updated role template"
+// @Success      200  {object}  models.RoleTemplate
+// @Failure      400  {object}  map[string]interface{}  "Invalid request or ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      403  {object}  map[string]interface{}  "Cannot modify system role templates"
+// @Failure      404  {object}  map[string]interface{}  "Role template not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/role-templates/{id} [put]
 // UpdateRoleTemplate updates an existing role template
 // PUT /api/v1/admin/role-templates/:id
 func (h *RBACHandlers) UpdateRoleTemplate(c *gin.Context) {
@@ -150,6 +199,19 @@ func (h *RBACHandlers) UpdateRoleTemplate(c *gin.Context) {
 	c.JSON(http.StatusOK, existing)
 }
 
+// @Summary      Delete role template
+// @Description  Delete a custom role template. Cannot delete system role templates. Requires admin scope.
+// @Tags         RBAC
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Role template ID (UUID)"
+// @Success      200  {object}  map[string]interface{}  "message: Role template deleted"
+// @Failure      400  {object}  map[string]interface{}  "Invalid role template ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      403  {object}  map[string]interface{}  "Cannot delete system role templates"
+// @Failure      404  {object}  map[string]interface{}  "Role template not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/role-templates/{id} [delete]
 // DeleteRoleTemplate deletes a role template
 // DELETE /api/v1/admin/role-templates/:id
 func (h *RBACHandlers) DeleteRoleTemplate(c *gin.Context) {
@@ -186,6 +248,18 @@ func (h *RBACHandlers) DeleteRoleTemplate(c *gin.Context) {
 // Mirror Approval Requests
 // ============================================================================
 
+// @Summary      List approval requests
+// @Description  List mirror approval requests, optionally filtered by organization or status. Requires admin scope.
+// @Tags         RBAC
+// @Security     Bearer
+// @Produce      json
+// @Param        organization_id  query  string  false  "Filter by organization ID (UUID)"
+// @Param        status           query  string  false  "Filter by status (pending, approved, rejected)"
+// @Success      200  {array}   models.MirrorApprovalRequest
+// @Failure      400  {object}  map[string]interface{}  "Invalid organization ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/approvals [get]
 // ListApprovalRequests lists all approval requests
 // GET /api/v1/admin/approvals
 func (h *RBACHandlers) ListApprovalRequests(c *gin.Context) {
@@ -214,6 +288,18 @@ func (h *RBACHandlers) ListApprovalRequests(c *gin.Context) {
 	c.JSON(http.StatusOK, requests)
 }
 
+// @Summary      Get approval request
+// @Description  Returns a specific mirror approval request by ID. Requires admin scope.
+// @Tags         RBAC
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Approval request ID (UUID)"
+// @Success      200  {object}  models.MirrorApprovalRequest
+// @Failure      400  {object}  map[string]interface{}  "Invalid approval request ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Approval request not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/approvals/{id} [get]
 // GetApprovalRequest returns a single approval request
 // GET /api/v1/admin/approvals/:id
 func (h *RBACHandlers) GetApprovalRequest(c *gin.Context) {
@@ -246,6 +332,18 @@ type CreateApprovalRequestRequest struct {
 	Reason            string  `json:"reason"`
 }
 
+// @Summary      Create approval request
+// @Description  Create a new mirror provider approval request. Requires admin scope.
+// @Tags         RBAC
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        body  body  CreateApprovalRequestRequest  true  "Approval request"
+// @Success      201  {object}  models.MirrorApprovalRequest
+// @Failure      400  {object}  map[string]interface{}  "Invalid request or mirror config ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/approvals [post]
 // CreateApprovalRequest creates a new approval request
 // POST /api/v1/admin/approvals
 func (h *RBACHandlers) CreateApprovalRequest(c *gin.Context) {
@@ -309,6 +407,19 @@ type ReviewApprovalRequest struct {
 	Notes  string `json:"notes"`
 }
 
+// @Summary      Review approval request
+// @Description  Approve or reject a mirror provider approval request. Requires admin scope.
+// @Tags         RBAC
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string                 true  "Approval request ID (UUID)"
+// @Param        body  body  ReviewApprovalRequest  true  "Review decision (status: approved or rejected)"
+// @Success      200  {object}  models.MirrorApprovalRequest
+// @Failure      400  {object}  map[string]interface{}  "Invalid ID or status value"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/approvals/{id}/review [put]
 // ReviewApproval approves or rejects an approval request
 // PUT /api/v1/admin/approvals/:id/review
 func (h *RBACHandlers) ReviewApproval(c *gin.Context) {
@@ -360,6 +471,17 @@ func (h *RBACHandlers) ReviewApproval(c *gin.Context) {
 // Mirror Policies
 // ============================================================================
 
+// @Summary      List mirror policies
+// @Description  List mirror access policies, optionally filtered by organization. Requires admin scope.
+// @Tags         RBAC
+// @Security     Bearer
+// @Produce      json
+// @Param        organization_id  query  string  false  "Filter by organization ID (UUID)"
+// @Success      200  {array}   models.MirrorPolicy
+// @Failure      400  {object}  map[string]interface{}  "Invalid organization ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/policies [get]
 // ListMirrorPolicies lists all mirror policies
 // GET /api/v1/admin/policies
 func (h *RBACHandlers) ListMirrorPolicies(c *gin.Context) {
@@ -382,6 +504,18 @@ func (h *RBACHandlers) ListMirrorPolicies(c *gin.Context) {
 	c.JSON(http.StatusOK, policies)
 }
 
+// @Summary      Get mirror policy
+// @Description  Returns a specific mirror access policy by ID. Requires admin scope.
+// @Tags         RBAC
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Policy ID (UUID)"
+// @Success      200  {object}  models.MirrorPolicy
+// @Failure      400  {object}  map[string]interface{}  "Invalid policy ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Policy not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/policies/{id} [get]
 // GetMirrorPolicy returns a single mirror policy
 // GET /api/v1/admin/policies/:id
 func (h *RBACHandlers) GetMirrorPolicy(c *gin.Context) {
@@ -420,6 +554,18 @@ type CreateMirrorPolicyRequest struct {
 	RequiresApproval bool    `json:"requires_approval"`
 }
 
+// @Summary      Create mirror policy
+// @Description  Create a new mirror access policy (allow or deny). Requires admin scope.
+// @Tags         RBAC
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        body  body  CreateMirrorPolicyRequest  true  "Mirror policy"
+// @Success      201  {object}  models.MirrorPolicy
+// @Failure      400  {object}  map[string]interface{}  "Invalid request or policy type"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/policies [post]
 // CreateMirrorPolicy creates a new mirror policy
 // POST /api/v1/admin/policies
 func (h *RBACHandlers) CreateMirrorPolicy(c *gin.Context) {
@@ -480,6 +626,20 @@ func (h *RBACHandlers) CreateMirrorPolicy(c *gin.Context) {
 	c.JSON(http.StatusCreated, policy)
 }
 
+// @Summary      Update mirror policy
+// @Description  Update an existing mirror access policy. Requires admin scope.
+// @Tags         RBAC
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string                    true  "Policy ID (UUID)"
+// @Param        body  body  CreateMirrorPolicyRequest  true  "Updated mirror policy"
+// @Success      200  {object}  models.MirrorPolicy
+// @Failure      400  {object}  map[string]interface{}  "Invalid request, ID, or policy type"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Policy not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/policies/{id} [put]
 // UpdateMirrorPolicy updates an existing mirror policy
 // PUT /api/v1/admin/policies/:id
 func (h *RBACHandlers) UpdateMirrorPolicy(c *gin.Context) {
@@ -531,6 +691,17 @@ func (h *RBACHandlers) UpdateMirrorPolicy(c *gin.Context) {
 	c.JSON(http.StatusOK, existing)
 }
 
+// @Summary      Delete mirror policy
+// @Description  Delete a mirror access policy. Requires admin scope.
+// @Tags         RBAC
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Policy ID (UUID)"
+// @Success      200  {object}  map[string]interface{}  "message: Policy deleted"
+// @Failure      400  {object}  map[string]interface{}  "Invalid policy ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/policies/{id} [delete]
 // DeleteMirrorPolicy deletes a mirror policy
 // DELETE /api/v1/admin/policies/:id
 func (h *RBACHandlers) DeleteMirrorPolicy(c *gin.Context) {
@@ -556,6 +727,19 @@ type EvaluatePolicyRequest struct {
 	Provider  string `json:"provider" binding:"required"`
 }
 
+// @Summary      Evaluate mirror policies
+// @Description  Evaluate all mirror policies for a specific provider to determine if access is allowed or denied. Requires admin scope.
+// @Tags         RBAC
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        organization_id  query  string                 false  "Organization ID (UUID) for scoped evaluation"
+// @Param        body             body   EvaluatePolicyRequest  true   "Provider to evaluate (registry, namespace, provider)"
+// @Success      200  {object}  map[string]interface{}  "Evaluation result"
+// @Failure      400  {object}  map[string]interface{}  "Invalid request or organization ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/policies/evaluate [post]
 // EvaluatePolicy evaluates policies for a given provider
 // POST /api/v1/admin/policies/evaluate
 func (h *RBACHandlers) EvaluatePolicy(c *gin.Context) {

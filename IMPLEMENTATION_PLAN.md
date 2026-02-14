@@ -1013,7 +1013,36 @@ GET/POST/DELETE /api/v1/api-keys
     - `main.tf` - Cloud Run v2 services, Cloud SQL PostgreSQL, GCS bucket, Secret Manager, Artifact Registry, VPC+connector, service account with IAM bindings
     - `variables.tf` - Project ID, region, domain, DB tier, image tag, instance counts, secrets
     - `outputs.tf` - Frontend/backend URLs, Cloud SQL connection, GCS bucket, Artifact Registry URL
-- **Session 22**: Phase 6 - SCM addition - Add Bitbucket Datacenter as an SCM for modules, fixup backend and frontend support
+- **Session 22** ✅: Phase 6 - SCM addition - Bitbucket Data Center integration
+  - Implemented Bitbucket Data Center connector as additional SCM provider alongside GitHub, Azure DevOps, and GitLab
+  - **Backend Changes**:
+    - Created `backend/internal/scm/bitbucket/connector.go` (636 LOC) - Full Bitbucket Data Center API integration:
+      - Repository browsing and search with pagination
+      - Repository metadata retrieval (name, description, slug, primary branch)
+      - Tag enumeration with commit SHA resolution
+      - Webhook creation and management (push, tag events)
+      - Automatic token refresh and error handling
+      - HTTP client with custom authentication headers for PAT-based access
+    - Updated `backend/internal/scm/connector.go` - Added Bitbucket Data Center provider type constant
+    - Updated `backend/internal/scm/types.go` - Added Bitbucket-specific repository metadata fields
+    - Updated `backend/internal/scm/errors.go` - Added Bitbucket error types
+    - Updated `backend/internal/api/admin/scm_oauth.go` - Enhanced OAuth flow to support PAT registration (no OAuth required for Bitbucket DC)
+    - Updated `backend/internal/api/admin/scm_providers.go` - Added Bitbucket host configuration endpoint
+    - Updated `backend/internal/api/webhooks/scm_webhook.go` - Added Bitbucket webhook signature validation
+    - Updated `backend/internal/api/router.go` - Added Bitbucket webhook route handlers
+    - Created database migration `000027_scm_bitbucket_dc.up.sql` - Adds `bitbucket_host` column to scm_providers table (for specifying Data Center instance URL)
+  - **Frontend Changes**:
+    - Enhanced `frontend/src/pages/admin/SCMProvidersPage.tsx`:
+      - Added Bitbucket Data Center as provider option in interface
+      - Dynamic form fields: PAT input for Bitbucket (vs OAuth for GitHub/Azure DevOps/GitLab)
+      - Bitbucket-specific URL field for Data Center instance hostname
+      - Updated table to show Bitbucket host URLs alongside provider names
+    - Updated `frontend/src/services/api.ts` - Added saveSCMProvider method enhancements for Bitbucket PAT handling
+    - Updated `frontend/src/types/scm.ts` - Extended SCMProvider type with bitbucket_host field
+  - **Terraform Updates**:
+    - Enhanced `deployments/terraform/azure/main.tf` - Added complete storage backend configuration support with dynamic secrets and environment variables for all 4 storage types
+    - Enhanced `deployments/terraform/gcp/main.tf` and `variables.tf` - Added comprehensive storage configuration with 130+ lines for all backend options
+  - Migration notes: Database migration 000027 adds SCM support for Bitbucket Data Center with host-specific configuration
 - **Session 23** ✅: Phase 6 - Storage configuration variables in Terraform deployments
   - Added `storage_backend` variable (with validation) and ~15 storage-specific variables to all 3 Terraform configs
   - Each cloud defaults to its native storage (S3 for AWS, Azure Blob for Azure, GCS for GCP) with zero extra config needed
@@ -1039,23 +1068,33 @@ GET/POST/DELETE /api/v1/api-keys
   - Added `rotateAPIKey()` method to `frontend/src/services/api.ts`
   - Added `RotateAPIKeyResponse` interface to `frontend/src/types/index.ts`
   - Frontend builds successfully with no compile errors
-- **Session 25**: Phase 7 - Documentation & Testing - Unit and integration tests, evaluate database migrations for consolidation/refactoring
-- **Session 26**: Phase 7 - Documentation & Testing - E2E tests and security scanning
-- **Session 27**: Phase 7 - Documentation & Testing - Comprehensive docs (features, security, configuration, deployment, apis, troubleshooting, contributing, testing), helper text on all frontend input boxes, documentation links on all frontend pages to open context sensitive help (maybe a support icon on the top bar that tracks page context). 
-- **Session 28**: Phase 8 - Production Polish - Security hardening, audit logging, API key expiration email alerts (background job to detect keys expiring within configurable threshold, SMTP/email integration, notification preferences), scan codebase for opensource license attribution violations (are we using any opensource code that we should be correctly attributing based on the code's license and re-use constraints?), license evaluation, based on the type of application we are releasing, is MIT license the best choice? should it be MPL or another opensource license?
-- **Session 29**: Phase 8 - Production Polish - Monitoring, observability, performance, optimization
-- **Session 30**: Phase 8 - Production Polish - Final testing, deployment checklist, github actions for dependabot bi-weekly builds
-- **Session 31**: Phase 8 - Production Polish - Evaluate whether a visual studio marketplace azure devops extension would be useful (formerly Phase 5B)
+- **Session 25** ✅: Phase 6 - Storage configuration Azure Blob Storage account ID fix
+  - Fixed critical bug in `deployments/terraform/azure/main.tf`:
+    - Changed from `azurerm_storage_account` resource reference to `azurerm_storage_account.main.primary_access_key` for Account Key secret
+    - Ensures correct secret management in Azure Container Apps deployment
+    - Resolves container app initialization failures related to storage configuration
+  - Database migration 000027 (Bitbucket DC) cleanup:
+    - Removed empty/duplicate migration files that may have been created during development
+    - Restored clean migration state to prevent schema inconsistencies
+    - **Phase 6 COMPLETE** - All deployment configurations, storage backends, SCM integrations, and API key management implemented
+- **Session 26**: Phase 7 - Documentation & Testing - Unit and integration tests, evaluate database migrations for consolidation/refactoring
+- **Session 27**: Phase 7 - Documentation & Testing - E2E tests and security scanning
+- **Session 28**: Phase 7 - Documentation & Testing - Comprehensive docs (features, security, configuration, deployment, apis, troubleshooting, contributing, testing), helper text on all frontend input boxes, documentation links on all frontend pages to open context sensitive help (maybe a support icon on the top bar that tracks page context).
+- **Session 29**: Phase 8 - Production Polish - Security hardening, audit logging, API key expiration email alerts (background job to detect keys expiring within configurable threshold, SMTP/email integration, notification preferences), scan codebase for opensource license attribution violations (are we using any opensource code that we should be correctly attributing based on the code's license and re-use constraints?), license evaluation, based on the type of application we are releasing, is MIT license the best choice? should it be MPL or another opensource license?
+- **Session 30**: Phase 8 - Production Polish - Monitoring, observability, performance, optimization
+- **Session 31**: Phase 8 - Production Polish - Final testing, deployment checklist, github actions for dependabot bi-weekly builds
+- **Session 32**: Phase 8 - Production Polish - Evaluate whether a visual studio marketplace azure devops extension would be useful (formerly Phase 5B)
 
 ---
 
-**Last Updated**: Session 23 - 2026-02-08
-**Status**: ✅ Session 23 COMPLETE - Storage configuration variables in Terraform deployments
-**Next Session**: Session 22 - SCM addition (Bitbucket Datacenter)
-**Priority**: Phase 6 (Deployment) - SCM integration expansion
+**Last Updated**: Session 25 - 2026-02-10
+**Status**: ✅ Session 25 COMPLETE - Storage configuration Azure Blob Storage account ID fix
+**Next Session**: Phase 7 - Unit and integration tests, database migrations evaluation
+**Priority**: Phase 6 → Phase 7 (Documentation & Testing)
 **Deferred**: Phase 5B (Azure DevOps Extension) - Will implement based on future demand
 
 **Note**: After Session 19, to activate the storage configuration UI:
+
 1. Apply database migration 000026: `migrate -database "postgres://..." -path backend/internal/db/migrations up`
 2. Restart the backend to pick up the new routes
 3. Navigate to Admin > Storage (requires admin scope)

@@ -10,6 +10,18 @@ import (
 	"github.com/terraform-registry/terraform-registry/internal/db/repositories"
 )
 
+// @Summary      Search modules
+// @Description  Search for modules by name, namespace, or provider system with pagination.
+// @Tags         Modules
+// @Produce      json
+// @Param        q          query  string  false  "Search query"
+// @Param        namespace  query  string  false  "Filter by namespace"
+// @Param        system     query  string  false  "Filter by target system"
+// @Param        limit      query  int     false  "Maximum results to return (default 20, max 100)"
+// @Param        offset     query  int     false  "Offset for pagination (default 0)"
+// @Success      200  {object}  map[string]interface{}  "modules: [], meta: {limit, offset, total}"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/modules/search [get]
 // SearchHandler handles module search requests
 // Implements: GET /api/v1/modules/search?q=<query>&namespace=<namespace>&system=<system>&limit=<limit>&offset=<offset>
 func SearchHandler(db *sql.DB, cfg *config.Config) gin.HandlerFunc {

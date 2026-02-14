@@ -28,6 +28,18 @@ func NewProviderAdminHandlers(db *sql.DB, storageBackend storage.Storage, cfg *c
 	}
 }
 
+// @Summary      Get provider
+// @Description  Retrieve a provider with all its versions and platforms. Requires providers:read scope.
+// @Tags         Providers
+// @Security     Bearer
+// @Produce      json
+// @Param        namespace  path  string  true  "Provider namespace"
+// @Param        type       path  string  true  "Provider type (e.g. aws, azurerm)"
+// @Success      200  {object}  map[string]interface{}  "id, namespace, type, versions, ..."
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Provider not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/providers/{namespace}/{type} [get]
 // GetProvider retrieves a specific provider by namespace and type
 // GET /api/v1/providers/:namespace/:type
 func (h *ProviderAdminHandlers) GetProvider(c *gin.Context) {
@@ -109,6 +121,18 @@ func (h *ProviderAdminHandlers) GetProvider(c *gin.Context) {
 	})
 }
 
+// @Summary      Delete provider
+// @Description  Delete a provider and all its versions and platform binaries from storage. Requires providers:delete scope.
+// @Tags         Providers
+// @Security     Bearer
+// @Produce      json
+// @Param        namespace  path  string  true  "Provider namespace"
+// @Param        type       path  string  true  "Provider type (e.g. aws, azurerm)"
+// @Success      200  {object}  map[string]interface{}  "message: Provider deleted successfully"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Provider not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/providers/{namespace}/{type} [delete]
 // DeleteProvider deletes a provider and all its versions/platforms
 // DELETE /api/v1/providers/:namespace/:type
 func (h *ProviderAdminHandlers) DeleteProvider(c *gin.Context) {
@@ -170,6 +194,19 @@ func (h *ProviderAdminHandlers) DeleteProvider(c *gin.Context) {
 	})
 }
 
+// @Summary      Delete provider version
+// @Description  Delete a specific provider version and all its platform binaries from storage. Requires providers:delete scope.
+// @Tags         Providers
+// @Security     Bearer
+// @Produce      json
+// @Param        namespace  path  string  true  "Provider namespace"
+// @Param        type       path  string  true  "Provider type (e.g. aws, azurerm)"
+// @Param        version    path  string  true  "Semantic version (e.g. 1.2.3)"
+// @Success      200  {object}  map[string]interface{}  "message: Version deleted successfully"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Provider or version not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/providers/{namespace}/{type}/versions/{version} [delete]
 // DeleteVersion deletes a specific version of a provider
 // DELETE /api/v1/providers/:namespace/:type/versions/:version
 func (h *ProviderAdminHandlers) DeleteVersion(c *gin.Context) {
@@ -240,6 +277,21 @@ type DeprecateVersionRequest struct {
 	Message string `json:"message,omitempty"`
 }
 
+// @Summary      Deprecate provider version
+// @Description  Mark a specific provider version as deprecated with an optional message. Requires providers:publish scope.
+// @Tags         Providers
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        namespace  path  string                 true   "Provider namespace"
+// @Param        type       path  string                 true   "Provider type (e.g. aws, azurerm)"
+// @Param        version    path  string                 true   "Semantic version (e.g. 1.2.3)"
+// @Param        body       body  DeprecateVersionRequest  false  "Optional deprecation message"
+// @Success      200  {object}  map[string]interface{}  "message: Version deprecated successfully"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Provider or version not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/providers/{namespace}/{type}/versions/{version}/deprecate [post]
 // DeprecateVersion marks a specific version as deprecated
 // POST /api/v1/providers/:namespace/:type/versions/:version/deprecate
 func (h *ProviderAdminHandlers) DeprecateVersion(c *gin.Context) {
@@ -308,6 +360,19 @@ func (h *ProviderAdminHandlers) DeprecateVersion(c *gin.Context) {
 	})
 }
 
+// @Summary      Undeprecate provider version
+// @Description  Remove the deprecated status from a provider version. Requires providers:publish scope.
+// @Tags         Providers
+// @Security     Bearer
+// @Produce      json
+// @Param        namespace  path  string  true  "Provider namespace"
+// @Param        type       path  string  true  "Provider type (e.g. aws, azurerm)"
+// @Param        version    path  string  true  "Semantic version (e.g. 1.2.3)"
+// @Success      200  {object}  map[string]interface{}  "message: Version deprecation removed successfully"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Provider or version not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/providers/{namespace}/{type}/versions/{version}/deprecate [delete]
 // UndeprecateVersion removes the deprecated status from a version
 // DELETE /api/v1/providers/:namespace/:type/versions/:version/deprecate
 func (h *ProviderAdminHandlers) UndeprecateVersion(c *gin.Context) {

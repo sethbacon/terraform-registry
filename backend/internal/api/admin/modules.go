@@ -29,6 +29,19 @@ func NewModuleAdminHandlers(db *sql.DB, storageBackend storage.Storage, cfg *con
 	}
 }
 
+// @Summary      Create module record
+// @Description  Create a module record without a version file. Used by the SCM publishing flow. Requires modules:publish scope.
+// @Tags         Modules
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object  true  "namespace, name, system, description (optional)"
+// @Success      200  {object}  models.Module  "Module already exists (returned as-is)"
+// @Success      201  {object}  models.Module  "Module created"
+// @Failure      400  {object}  map[string]interface{}  "Invalid request"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/modules/create [post]
 // CreateModuleRecord creates a module record without a version file.
 // This is used by the SCM publishing flow to register a module before linking it to a repository.
 // POST /api/v1/admin/modules/create
@@ -84,6 +97,19 @@ func (h *ModuleAdminHandlers) CreateModuleRecord(c *gin.Context) {
 	c.JSON(http.StatusCreated, module)
 }
 
+// @Summary      Get module
+// @Description  Retrieve a module with all its versions, download counts, and metadata. Requires modules:read scope.
+// @Tags         Modules
+// @Security     Bearer
+// @Produce      json
+// @Param        namespace  path  string  true  "Module namespace"
+// @Param        name       path  string  true  "Module name"
+// @Param        system     path  string  true  "Target system (e.g. aws, azurerm)"
+// @Success      200  {object}  map[string]interface{}  "id, namespace, name, system, versions, download_count, ..."
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Module not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/modules/{namespace}/{name}/{system} [get]
 // GetModule retrieves a specific module by namespace, name, and system
 // GET /api/v1/modules/:namespace/:name/:system
 func (h *ModuleAdminHandlers) GetModule(c *gin.Context) {
@@ -159,6 +185,19 @@ func (h *ModuleAdminHandlers) GetModule(c *gin.Context) {
 	})
 }
 
+// @Summary      Delete module
+// @Description  Delete a module and all its versions, including files in storage. Requires modules:delete scope.
+// @Tags         Modules
+// @Security     Bearer
+// @Produce      json
+// @Param        namespace  path  string  true  "Module namespace"
+// @Param        name       path  string  true  "Module name"
+// @Param        system     path  string  true  "Target system (e.g. aws, azurerm)"
+// @Success      200  {object}  map[string]interface{}  "message: Module deleted successfully"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Module not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/modules/{namespace}/{name}/{system} [delete]
 // DeleteModule deletes a module and all its versions
 // DELETE /api/v1/modules/:namespace/:name/:system
 func (h *ModuleAdminHandlers) DeleteModule(c *gin.Context) {
@@ -219,6 +258,20 @@ func (h *ModuleAdminHandlers) DeleteModule(c *gin.Context) {
 	})
 }
 
+// @Summary      Delete module version
+// @Description  Delete a specific version of a module, including its file in storage. Requires modules:delete scope.
+// @Tags         Modules
+// @Security     Bearer
+// @Produce      json
+// @Param        namespace  path  string  true  "Module namespace"
+// @Param        name       path  string  true  "Module name"
+// @Param        system     path  string  true  "Target system (e.g. aws, azurerm)"
+// @Param        version    path  string  true  "Semantic version (e.g. 1.2.3)"
+// @Success      200  {object}  map[string]interface{}  "message: Version deleted successfully"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Module or version not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/modules/{namespace}/{name}/{system}/versions/{version} [delete]
 // DeleteVersion deletes a specific version of a module
 // DELETE /api/v1/modules/:namespace/:name/:system/versions/:version
 func (h *ModuleAdminHandlers) DeleteVersion(c *gin.Context) {
@@ -288,6 +341,22 @@ type DeprecateModuleVersionRequest struct {
 	Message string `json:"message,omitempty"`
 }
 
+// @Summary      Deprecate module version
+// @Description  Mark a specific module version as deprecated with an optional message. Requires modules:publish scope.
+// @Tags         Modules
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        namespace  path  string                       true   "Module namespace"
+// @Param        name       path  string                       true   "Module name"
+// @Param        system     path  string                       true   "Target system (e.g. aws, azurerm)"
+// @Param        version    path  string                       true   "Semantic version (e.g. 1.2.3)"
+// @Param        body       body  DeprecateModuleVersionRequest  false  "Optional deprecation message"
+// @Success      200  {object}  map[string]interface{}  "message: Version deprecated successfully"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Module or version not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/modules/{namespace}/{name}/{system}/versions/{version}/deprecate [post]
 // DeprecateVersion marks a specific version as deprecated
 // POST /api/v1/modules/:namespace/:name/:system/versions/:version/deprecate
 func (h *ModuleAdminHandlers) DeprecateVersion(c *gin.Context) {
@@ -358,6 +427,20 @@ func (h *ModuleAdminHandlers) DeprecateVersion(c *gin.Context) {
 	})
 }
 
+// @Summary      Undeprecate module version
+// @Description  Remove the deprecated status from a module version. Requires modules:publish scope.
+// @Tags         Modules
+// @Security     Bearer
+// @Produce      json
+// @Param        namespace  path  string  true  "Module namespace"
+// @Param        name       path  string  true  "Module name"
+// @Param        system     path  string  true  "Target system (e.g. aws, azurerm)"
+// @Param        version    path  string  true  "Semantic version (e.g. 1.2.3)"
+// @Success      200  {object}  map[string]interface{}  "message: Version deprecation removed successfully"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Module or version not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/modules/{namespace}/{name}/{system}/versions/{version}/deprecate [delete]
 // UndeprecateVersion removes the deprecated status from a version
 // DELETE /api/v1/modules/:namespace/:name/:system/versions/:version/deprecate
 func (h *ModuleAdminHandlers) UndeprecateVersion(c *gin.Context) {

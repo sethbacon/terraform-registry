@@ -41,6 +41,21 @@ type LinkSCMRequest struct {
 	AutoPublish     bool   `json:"auto_publish_enabled"`
 }
 
+// @Summary      Link module to SCM repository
+// @Description  Link a module to a source repository in an SCM provider. Returns a webhook callback URL to register in the repository settings.
+// @Tags         SCM Linking
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string          true  "Module ID (UUID)"
+// @Param        body  body  LinkSCMRequest  true  "Repository link configuration"
+// @Success      201  {object}  map[string]interface{}  "link_id, webhook_callback_url, message"
+// @Failure      400  {object}  map[string]interface{}  "Invalid module or provider ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "SCM provider not found"
+// @Failure      409  {object}  map[string]interface{}  "Module is already linked to a repository"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/modules/{id}/scm [post]
 // LinkModuleToSCM links a module to an SCM repository
 // POST /api/v1/admin/modules/:id/scm
 func (h *SCMLinkingHandler) LinkModuleToSCM(c *gin.Context) {
@@ -149,6 +164,20 @@ func (h *SCMLinkingHandler) LinkModuleToSCM(c *gin.Context) {
 	})
 }
 
+// @Summary      Update SCM repository link
+// @Description  Update the configuration of an existing SCM repository link for a module.
+// @Tags         SCM Linking
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string          true  "Module ID (UUID)"
+// @Param        body  body  LinkSCMRequest  true  "Updated repository link configuration"
+// @Success      200  {object}  map[string]interface{}  "message: repository link updated"
+// @Failure      400  {object}  map[string]interface{}  "Invalid module ID or request body"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Module is not linked to a repository"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/modules/{id}/scm [put]
 // UpdateSCMLink updates the SCM link configuration
 // PUT /api/v1/admin/modules/:id/scm
 func (h *SCMLinkingHandler) UpdateSCMLink(c *gin.Context) {
@@ -192,6 +221,18 @@ func (h *SCMLinkingHandler) UpdateSCMLink(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "repository link updated"})
 }
 
+// @Summary      Unlink module from SCM repository
+// @Description  Remove the SCM repository link from a module, disabling webhook-based syncing.
+// @Tags         SCM Linking
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Module ID (UUID)"
+// @Success      200  {object}  map[string]interface{}  "message: module unlinked from repository"
+// @Failure      400  {object}  map[string]interface{}  "Invalid module ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Module is not linked to a repository"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/modules/{id}/scm [delete]
 // UnlinkModuleFromSCM removes the SCM repository link
 // DELETE /api/v1/admin/modules/:id/scm
 func (h *SCMLinkingHandler) UnlinkModuleFromSCM(c *gin.Context) {
@@ -224,6 +265,18 @@ func (h *SCMLinkingHandler) UnlinkModuleFromSCM(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "module unlinked from repository"})
 }
 
+// @Summary      Get module SCM link info
+// @Description  Retrieve the SCM repository link configuration and webhook details for a module.
+// @Tags         SCM Linking
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Module ID (UUID)"
+// @Success      200  {object}  scm.ModuleSourceRepoRecord  "Repository link details including webhook URL and status"
+// @Failure      400  {object}  map[string]interface{}  "Invalid module ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Module is not linked to a repository"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/modules/{id}/scm [get]
 // GetModuleSCMInfo retrieves the SCM link information for a module
 // GET /api/v1/admin/modules/:id/scm
 func (h *SCMLinkingHandler) GetModuleSCMInfo(c *gin.Context) {
@@ -247,6 +300,18 @@ func (h *SCMLinkingHandler) GetModuleSCMInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, link)
 }
 
+// @Summary      Trigger manual SCM sync
+// @Description  Manually trigger a repository sync to import new tags and versions from the linked SCM repository.
+// @Tags         SCM Linking
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Module ID (UUID)"
+// @Success      202  {object}  map[string]interface{}  "message: sync triggered"
+// @Failure      400  {object}  map[string]interface{}  "Invalid module ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Module is not linked to a repository"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/modules/{id}/scm/sync [post]
 // TriggerManualSync manually triggers a repository sync
 // POST /api/v1/admin/modules/:id/scm/sync
 func (h *SCMLinkingHandler) TriggerManualSync(c *gin.Context) {
@@ -272,6 +337,18 @@ func (h *SCMLinkingHandler) TriggerManualSync(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{"message": "sync triggered"})
 }
 
+// @Summary      Get webhook event history
+// @Description  Retrieve the recent webhook event log for a module's SCM repository link (last 50 events).
+// @Tags         SCM Linking
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Module ID (UUID)"
+// @Success      200  {object}  map[string]interface{}  "events: []WebhookLog"
+// @Failure      400  {object}  map[string]interface{}  "Invalid module ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Module is not linked to a repository"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/modules/{id}/scm/events [get]
 // GetWebhookEvents retrieves webhook event history for a module
 // GET /api/v1/admin/modules/:id/scm/events
 func (h *SCMLinkingHandler) GetWebhookEvents(c *gin.Context) {

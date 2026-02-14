@@ -11,15 +11,17 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	Server        ServerConfig        `mapstructure:"server"`
-	Database      DatabaseConfig      `mapstructure:"database"`
-	Storage       StorageConfig       `mapstructure:"storage"`
-	Auth          AuthConfig          `mapstructure:"auth"`
-	MultiTenancy  MultiTenancyConfig  `mapstructure:"multi_tenancy"`
-	Security      SecurityConfig      `mapstructure:"security"`
-	Logging       LoggingConfig       `mapstructure:"logging"`
-	Telemetry     TelemetryConfig     `mapstructure:"telemetry"`
-	Audit         AuditConfig         `mapstructure:"audit"`
+	Server   ServerConfig   `mapstructure:"server"`
+	Database DatabaseConfig `mapstructure:"database"`
+	Storage  StorageConfig  `mapstructure:"storage"`
+	Auth     AuthConfig     `mapstructure:"auth"`
+	// ApiDocs holds OpenAPI/Swagger metadata that can be overridden at deploy-time
+	ApiDocs      ApiDocsConfig      `mapstructure:"api_docs"`
+	MultiTenancy MultiTenancyConfig `mapstructure:"multi_tenancy"`
+	Security     SecurityConfig     `mapstructure:"security"`
+	Logging      LoggingConfig      `mapstructure:"logging"`
+	Telemetry    TelemetryConfig    `mapstructure:"telemetry"`
+	Audit        AuditConfig        `mapstructure:"audit"`
 }
 
 // ServerConfig holds HTTP server configuration
@@ -44,11 +46,11 @@ type DatabaseConfig struct {
 
 // StorageConfig holds storage backend configuration
 type StorageConfig struct {
-	DefaultBackend string              `mapstructure:"default_backend"`
-	Azure          AzureStorageConfig  `mapstructure:"azure"`
-	S3             S3StorageConfig     `mapstructure:"s3"`
-	GCS            GCSStorageConfig    `mapstructure:"gcs"`
-	Local          LocalStorageConfig  `mapstructure:"local"`
+	DefaultBackend string             `mapstructure:"default_backend"`
+	Azure          AzureStorageConfig `mapstructure:"azure"`
+	S3             S3StorageConfig    `mapstructure:"s3"`
+	GCS            GCSStorageConfig   `mapstructure:"gcs"`
+	Local          LocalStorageConfig `mapstructure:"local"`
 }
 
 // AzureStorageConfig holds Azure Blob Storage configuration
@@ -123,9 +125,9 @@ type LocalStorageConfig struct {
 
 // AuthConfig holds authentication configuration
 type AuthConfig struct {
-	APIKeys  APIKeyConfig  `mapstructure:"api_keys"`
-	OIDC     OIDCConfig    `mapstructure:"oidc"`
-	AzureAD  AzureADConfig `mapstructure:"azure_ad"`
+	APIKeys APIKeyConfig  `mapstructure:"api_keys"`
+	OIDC    OIDCConfig    `mapstructure:"oidc"`
+	AzureAD AzureADConfig `mapstructure:"azure_ad"`
 }
 
 // APIKeyConfig holds API key authentication configuration
@@ -175,9 +177,9 @@ type CORSConfig struct {
 
 // RateLimitingConfig holds rate limiting configuration
 type RateLimitingConfig struct {
-	Enabled            bool `mapstructure:"enabled"`
-	RequestsPerMinute  int  `mapstructure:"requests_per_minute"`
-	Burst              int  `mapstructure:"burst"`
+	Enabled           bool `mapstructure:"enabled"`
+	RequestsPerMinute int  `mapstructure:"requests_per_minute"`
+	Burst             int  `mapstructure:"burst"`
 }
 
 // TLSConfig holds TLS/HTTPS configuration
@@ -196,11 +198,11 @@ type LoggingConfig struct {
 
 // TelemetryConfig holds observability configuration
 type TelemetryConfig struct {
-	Enabled     bool             `mapstructure:"enabled"`
-	ServiceName string           `mapstructure:"service_name"`
-	Metrics     MetricsConfig    `mapstructure:"metrics"`
-	Tracing     TracingConfig    `mapstructure:"tracing"`
-	Profiling   ProfilingConfig  `mapstructure:"profiling"`
+	Enabled     bool            `mapstructure:"enabled"`
+	ServiceName string          `mapstructure:"service_name"`
+	Metrics     MetricsConfig   `mapstructure:"metrics"`
+	Tracing     TracingConfig   `mapstructure:"tracing"`
+	Profiling   ProfilingConfig `mapstructure:"profiling"`
 }
 
 // MetricsConfig holds Prometheus metrics configuration
@@ -269,6 +271,14 @@ type AuditFileConfig struct {
 	Path       string `mapstructure:"path"`
 	MaxSizeMB  int    `mapstructure:"max_size_mb"`
 	MaxBackups int    `mapstructure:"max_backups"`
+}
+
+// ApiDocsConfig holds configurable metadata for the generated OpenAPI/Swagger docs
+type ApiDocsConfig struct {
+	TermsOfService string `mapstructure:"terms_of_service"`
+	ContactName    string `mapstructure:"contact_name"`
+	ContactEmail   string `mapstructure:"contact_email"`
+	License        string `mapstructure:"license"`
 }
 
 // bindEnvVars explicitly binds environment variables to config keys
@@ -359,6 +369,12 @@ func bindEnvVars(v *viper.Viper) {
 	v.BindEnv("telemetry.tracing.jaeger_endpoint")
 	v.BindEnv("telemetry.profiling.enabled")
 	v.BindEnv("telemetry.profiling.port")
+
+	// API docs / OpenAPI metadata
+	v.BindEnv("api_docs.terms_of_service")
+	v.BindEnv("api_docs.contact_name")
+	v.BindEnv("api_docs.contact_email")
+	v.BindEnv("api_docs.license")
 }
 
 // Load loads configuration from file and environment variables
@@ -474,6 +490,12 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("telemetry.tracing.enabled", false)
 	v.SetDefault("telemetry.profiling.enabled", false)
 	v.SetDefault("telemetry.profiling.port", 6060)
+
+	// API docs / OpenAPI metadata defaults
+	v.SetDefault("api_docs.terms_of_service", "")
+	v.SetDefault("api_docs.contact_name", "")
+	v.SetDefault("api_docs.contact_email", "")
+	v.SetDefault("api_docs.license", "")
 }
 
 // expandEnv expands environment variables in the format ${VAR_NAME}

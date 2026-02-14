@@ -19,6 +19,7 @@ import SCMProvidersPage from './pages/admin/SCMProvidersPage';
 import MirrorsPage from './pages/admin/MirrorsPage';
 import RolesPage from './pages/admin/RolesPage';
 import StoragePage from './pages/admin/StoragePage';
+import ApiDocumentation from './pages/ApiDocumentation';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -43,6 +44,9 @@ function App() {
               {/* Providers */}
               <Route path="/providers" element={<ProvidersPage />} />
               <Route path="/providers/:namespace/:type" element={<ProviderDetailPage />} />
+
+              {/* API Documentation */}
+              <Route path="/api-docs" element={<ApiDocumentation />} />
 
               {/* Admin routes (protected with scope requirements) */}
               <Route path="/admin" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />

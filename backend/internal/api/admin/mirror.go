@@ -38,6 +38,19 @@ func (h *MirrorHandler) SetSyncJob(syncJob MirrorSyncJobInterface) {
 	h.syncJob = syncJob
 }
 
+// @Summary      Create mirror configuration
+// @Description  Create a new provider mirror configuration. Requires admin scope.
+// @Tags         Mirror
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        body  body  models.CreateMirrorConfigRequest  true  "Mirror configuration"
+// @Success      201  {object}  models.MirrorConfiguration
+// @Failure      400  {object}  map[string]interface{}  "Invalid request or registry URL"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      409  {object}  map[string]interface{}  "Mirror with this name already exists"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/mirrors [post]
 // CreateMirrorConfig creates a new mirror configuration
 // POST /api/v1/admin/mirrors
 func (h *MirrorHandler) CreateMirrorConfig(c *gin.Context) {
@@ -138,6 +151,16 @@ func (h *MirrorHandler) CreateMirrorConfig(c *gin.Context) {
 	c.JSON(http.StatusCreated, config)
 }
 
+// @Summary      List mirror configurations
+// @Description  List all provider mirror configurations, optionally filtered to enabled only. Requires admin scope.
+// @Tags         Mirror
+// @Security     Bearer
+// @Produce      json
+// @Param        enabled  query  bool  false  "Filter to enabled mirrors only"
+// @Success      200  {object}  map[string]interface{}  "mirrors: []models.MirrorConfiguration"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/mirrors [get]
 // ListMirrorConfigs lists all mirror configurations
 // GET /api/v1/admin/mirrors
 func (h *MirrorHandler) ListMirrorConfigs(c *gin.Context) {
@@ -152,6 +175,18 @@ func (h *MirrorHandler) ListMirrorConfigs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"mirrors": configs})
 }
 
+// @Summary      Get mirror configuration
+// @Description  Retrieve a specific mirror configuration by ID. Requires admin scope.
+// @Tags         Mirror
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Mirror configuration ID (UUID)"
+// @Success      200  {object}  models.MirrorConfiguration
+// @Failure      400  {object}  map[string]interface{}  "Invalid mirror ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Mirror configuration not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/mirrors/{id} [get]
 // GetMirrorConfig retrieves a specific mirror configuration
 // GET /api/v1/admin/mirrors/:id
 func (h *MirrorHandler) GetMirrorConfig(c *gin.Context) {
@@ -176,6 +211,21 @@ func (h *MirrorHandler) GetMirrorConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, config)
 }
 
+// @Summary      Update mirror configuration
+// @Description  Update a provider mirror configuration. All fields are optional. Requires admin scope.
+// @Tags         Mirror
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string                          true  "Mirror configuration ID (UUID)"
+// @Param        body  body  models.UpdateMirrorConfigRequest  true  "Fields to update"
+// @Success      200  {object}  models.MirrorConfiguration
+// @Failure      400  {object}  map[string]interface{}  "Invalid request, ID, or registry URL"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Mirror configuration not found"
+// @Failure      409  {object}  map[string]interface{}  "Name conflict with another mirror"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/mirrors/{id} [put]
 // UpdateMirrorConfig updates a mirror configuration
 // PUT /api/v1/admin/mirrors/:id
 func (h *MirrorHandler) UpdateMirrorConfig(c *gin.Context) {
@@ -299,6 +349,17 @@ func (h *MirrorHandler) UpdateMirrorConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, config)
 }
 
+// @Summary      Delete mirror configuration
+// @Description  Delete a provider mirror configuration and its sync history. Requires admin scope.
+// @Tags         Mirror
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Mirror configuration ID (UUID)"
+// @Success      200  {object}  map[string]interface{}  "message: Mirror configuration deleted successfully"
+// @Failure      400  {object}  map[string]interface{}  "Invalid mirror ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/mirrors/{id} [delete]
 // DeleteMirrorConfig deletes a mirror configuration
 // DELETE /api/v1/admin/mirrors/:id
 func (h *MirrorHandler) DeleteMirrorConfig(c *gin.Context) {
@@ -317,6 +378,22 @@ func (h *MirrorHandler) DeleteMirrorConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Mirror configuration deleted successfully"})
 }
 
+// @Summary      Trigger mirror sync
+// @Description  Trigger an immediate sync for a mirror configuration. Returns 409 if a sync is already in progress. Requires admin scope.
+// @Tags         Mirror
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string                       true  "Mirror configuration ID (UUID)"
+// @Param        body  body  models.TriggerSyncRequest  false  "Optional sync options"
+// @Success      202  {object}  map[string]interface{}  "message: Sync triggered successfully"
+// @Failure      400  {object}  map[string]interface{}  "Invalid mirror ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Mirror configuration not found"
+// @Failure      409  {object}  map[string]interface{}  "Sync already in progress"
+// @Failure      503  {object}  map[string]interface{}  "Sync job not configured"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/mirrors/{id}/sync [post]
 // TriggerSync triggers a manual sync for a mirror configuration
 // POST /api/v1/admin/mirrors/:id/sync
 func (h *MirrorHandler) TriggerSync(c *gin.Context) {
@@ -366,6 +443,18 @@ func (h *MirrorHandler) TriggerSync(c *gin.Context) {
 	})
 }
 
+// @Summary      Get mirror sync status
+// @Description  Get the current sync status, active sync, and recent sync history for a mirror. Requires admin scope.
+// @Tags         Mirror
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "Mirror configuration ID (UUID)"
+// @Success      200  {object}  models.MirrorSyncStatus
+// @Failure      400  {object}  map[string]interface{}  "Invalid mirror ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Mirror configuration not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/mirrors/{id}/status [get]
 // GetMirrorStatus retrieves the status and sync history for a mirror configuration
 // GET /api/v1/admin/mirrors/:id/status
 func (h *MirrorHandler) GetMirrorStatus(c *gin.Context) {

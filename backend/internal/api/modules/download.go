@@ -13,6 +13,19 @@ import (
 	"github.com/terraform-registry/terraform-registry/internal/validation"
 )
 
+// @Summary      Download module version
+// @Description  Returns a 204 response with an X-Terraform-Get header containing the download URL. Implements the Terraform Module Registry Protocol.
+// @Tags         Modules
+// @Produce      json
+// @Param        namespace  path  string  true  "Module namespace"
+// @Param        name       path  string  true  "Module name"
+// @Param        system     path  string  true  "Target system (e.g. aws, azurerm)"
+// @Param        version    path  string  true  "Semantic version (e.g. 1.2.3)"
+// @Success      204  "No Content — X-Terraform-Get header contains the download URL"
+// @Failure      400  {object}  map[string]interface{}  "Invalid version format"
+// @Failure      404  {object}  map[string]interface{}  "Module or version not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /v1/modules/{namespace}/{name}/{system}/{version}/download [get]
 // DownloadHandler handles module download requests
 // Implements: GET /v1/modules/:namespace/:name/:system/:version/download
 // Returns 204 No Content with X-Terraform-Get header pointing to download URL

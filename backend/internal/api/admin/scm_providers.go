@@ -49,6 +49,18 @@ type UpdateSCMProviderRequest struct {
 	IsActive      *bool   `json:"is_active,omitempty"`
 }
 
+// @Summary      Create SCM provider
+// @Description  Create a new SCM provider configuration (GitHub, GitLab, Bitbucket, etc.). Requires admin scope.
+// @Tags         SCM Providers
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        body  body  CreateSCMProviderRequest  true  "SCM provider configuration"
+// @Success      201  {object}  scm.SCMProviderRecord
+// @Failure      400  {object}  map[string]interface{}  "Invalid request or provider type"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/scm-providers [post]
 // CreateProvider creates a new SCM provider configuration
 // POST /api/v1/scm-providers
 func (h *SCMProviderHandlers) CreateProvider(c *gin.Context) {
@@ -123,6 +135,17 @@ func (h *SCMProviderHandlers) CreateProvider(c *gin.Context) {
 	c.JSON(http.StatusCreated, provider)
 }
 
+// @Summary      List SCM providers
+// @Description  List all SCM provider configurations, optionally filtered by organization. Requires admin scope.
+// @Tags         SCM Providers
+// @Security     Bearer
+// @Produce      json
+// @Param        organization_id  query  string  false  "Filter by organization ID (UUID)"
+// @Success      200  {array}   scm.SCMProviderRecord
+// @Failure      400  {object}  map[string]interface{}  "Invalid organization ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/scm-providers [get]
 // ListProviders lists all SCM provider configurations
 // GET /api/v1/scm-providers
 func (h *SCMProviderHandlers) ListProviders(c *gin.Context) {
@@ -151,6 +174,18 @@ func (h *SCMProviderHandlers) ListProviders(c *gin.Context) {
 	c.JSON(http.StatusOK, providers)
 }
 
+// @Summary      Get SCM provider
+// @Description  Retrieve a specific SCM provider configuration by ID. Requires admin scope.
+// @Tags         SCM Providers
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "SCM provider ID (UUID)"
+// @Success      200  {object}  scm.SCMProviderRecord
+// @Failure      400  {object}  map[string]interface{}  "Invalid provider ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Provider not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/scm-providers/{id} [get]
 // GetProvider retrieves a single SCM provider by ID
 // GET /api/v1/scm-providers/:id
 func (h *SCMProviderHandlers) GetProvider(c *gin.Context) {
@@ -175,6 +210,20 @@ func (h *SCMProviderHandlers) GetProvider(c *gin.Context) {
 	c.JSON(http.StatusOK, provider)
 }
 
+// @Summary      Update SCM provider
+// @Description  Update an existing SCM provider configuration. All fields are optional. Requires admin scope.
+// @Tags         SCM Providers
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string                    true  "SCM provider ID (UUID)"
+// @Param        body  body  UpdateSCMProviderRequest  true  "Fields to update"
+// @Success      200  {object}  scm.SCMProviderRecord
+// @Failure      400  {object}  map[string]interface{}  "Invalid request or ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404  {object}  map[string]interface{}  "Provider not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/scm-providers/{id} [put]
 // UpdateProvider updates an SCM provider configuration
 // PUT /api/v1/scm-providers/:id
 func (h *SCMProviderHandlers) UpdateProvider(c *gin.Context) {
@@ -240,6 +289,17 @@ func (h *SCMProviderHandlers) UpdateProvider(c *gin.Context) {
 	c.JSON(http.StatusOK, provider)
 }
 
+// @Summary      Delete SCM provider
+// @Description  Delete an SCM provider configuration. Requires admin scope.
+// @Tags         SCM Providers
+// @Security     Bearer
+// @Produce      json
+// @Param        id  path  string  true  "SCM provider ID (UUID)"
+// @Success      200  {object}  map[string]interface{}  "message: provider deleted"
+// @Failure      400  {object}  map[string]interface{}  "Invalid provider ID"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/scm-providers/{id} [delete]
 // DeleteProvider deletes an SCM provider configuration
 // DELETE /api/v1/scm-providers/:id
 func (h *SCMProviderHandlers) DeleteProvider(c *gin.Context) {

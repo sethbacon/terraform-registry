@@ -22,6 +22,28 @@ const (
 	MaxProviderBinarySize = 500 << 20 // 500MB
 )
 
+// @Summary      Upload provider platform binary
+// @Description  Upload a provider binary (.zip) for a specific platform. Creates provider and version if they don't exist. Requires providers:publish scope.
+// @Tags         Providers
+// @Security     Bearer
+// @Accept       multipart/form-data
+// @Produce      json
+// @Param        namespace      formData  string  true   "Provider namespace"
+// @Param        type           formData  string  true   "Provider type (e.g. aws, azurerm)"
+// @Param        version        formData  string  true   "Semantic version (e.g. 1.2.3)"
+// @Param        os             formData  string  true   "Target OS (e.g. linux, darwin, windows)"
+// @Param        arch           formData  string  true   "Target architecture (e.g. amd64, arm64)"
+// @Param        protocols      formData  string  false  "JSON array of supported protocols (default [\"5.0\"])"
+// @Param        gpg_public_key formData  string  false  "ASCII-armored GPG public key for signing verification"
+// @Param        description    formData  string  false  "Provider description"
+// @Param        source         formData  string  false  "Source URL"
+// @Param        file           formData  file    true   "Provider binary (.zip, max 500MB)"
+// @Success      201  {object}  map[string]interface{}  "id, namespace, type, version, os, arch, checksum, size_bytes"
+// @Failure      400  {object}  map[string]interface{}  "Invalid request, version format, platform, or binary"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      409  {object}  map[string]interface{}  "Platform already exists for this version"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/providers [post]
 // UploadHandler handles provider upload requests
 // Implements: POST /api/v1/providers
 // Accepts multipart form with: namespace, type, version, os, arch, protocols, gpg_public_key, file

@@ -75,6 +75,16 @@ func generateState() (string, error) {
 	return base64.URLEncoding.EncodeToString(b), nil
 }
 
+// @Summary      Initiate OAuth login
+// @Description  Redirect user to OAuth provider (OIDC or Azure AD) to begin authentication flow
+// @Tags         Authentication
+// @Accept       json
+// @Produce      json
+// @Param        provider  query  string  false  "OAuth provider: oidc or azuread (default: oidc)"
+// @Success      302  {object}  string  "Redirects to OAuth provider authorization URL"
+// @Failure      400  {object}  map[string]interface{}  "Invalid provider or provider not configured"
+// @Failure      500  {object}  map[string]interface{}  "Failed to generate state or internal error"
+// @Router       /api/v1/auth/login [get]
 // LoginHandler initiates the OAuth login flow
 // GET /api/v1/auth/login?provider=oidc|azuread
 func (h *AuthHandlers) LoginHandler() gin.HandlerFunc {
@@ -131,6 +141,18 @@ func (h *AuthHandlers) LoginHandler() gin.HandlerFunc {
 	}
 }
 
+// @Summary      OAuth callback handler
+// @Description  Handles the callback from OAuth provider after user authorizes. Internal endpoint - automatically redirected to by OAuth provider.
+// @Tags         Authentication
+// @Accept       json
+// @Produce      json
+// @Param        code   query  string  true   "Authorization code from OAuth provider"
+// @Param        state  query  string  true   "State parameter for CSRF validation"
+// @Success      301  {object}  string  "Redirects to frontend with auth token in URL"
+// @Failure      400  {object}  map[string]interface{}  "Invalid state or authorization code"
+// @Failure      401  {object}  map[string]interface{}  "Failed to exchange code for token"
+// @Failure      500  {object}  map[string]interface{}  "Database or internal error"
+// @Router       /api/v1/auth/callback [get]
 // CallbackHandler handles OAuth callback
 // GET /api/v1/auth/callback?code=...&state=...
 func (h *AuthHandlers) CallbackHandler() gin.HandlerFunc {
@@ -288,6 +310,16 @@ func (h *AuthHandlers) CallbackHandler() gin.HandlerFunc {
 	}
 }
 
+// @Summary      Refresh JWT token
+// @Description  Exchange existing JWT token for a fresh one with extended expiration
+// @Tags         Authentication
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}  "New JWT token with extended expiration"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized - invalid or missing token"
+// @Failure      500  {object}  map[string]interface{}  "Internal error during token generation"
+// @Router       /api/v1/auth/refresh [post]
 // RefreshHandler refreshes an existing JWT token
 // POST /api/v1/auth/refresh
 // Authorization: Bearer <existing_jwt>
@@ -335,6 +367,17 @@ func (h *AuthHandlers) RefreshHandler() gin.HandlerFunc {
 	}
 }
 
+// @Summary      Get current user
+// @Description  Retrieve information about the currently authenticated user, including organization memberships and role templates
+// @Tags         Authentication
+// @Security     Bearer
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}  "Current user information with memberships and role templates"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized - user not authenticated"
+// @Failure      404  {object}  map[string]interface{}  "User not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/auth/me [get]
 // MeHandler returns the current authenticated user's information including per-org role templates
 // GET /api/v1/auth/me
 func (h *AuthHandlers) MeHandler() gin.HandlerFunc {

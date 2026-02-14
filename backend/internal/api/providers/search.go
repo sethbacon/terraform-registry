@@ -10,6 +10,17 @@ import (
 	"github.com/terraform-registry/terraform-registry/internal/db/repositories"
 )
 
+// @Summary      Search providers
+// @Description  Search for providers by name or namespace with pagination.
+// @Tags         Providers
+// @Produce      json
+// @Param        q          query  string  false  "Search query"
+// @Param        namespace  query  string  false  "Filter by namespace"
+// @Param        limit      query  int     false  "Maximum results to return (default 20, max 100)"
+// @Param        offset     query  int     false  "Offset for pagination (default 0)"
+// @Success      200  {object}  map[string]interface{}  "providers: [], meta: {limit, offset, total}"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/providers/search [get]
 // SearchHandler handles provider search requests
 // Implements: GET /api/v1/providers/search?q=<query>&namespace=<namespace>&limit=<limit>&offset=<offset>
 func SearchHandler(db *sql.DB, cfg *config.Config) gin.HandlerFunc {

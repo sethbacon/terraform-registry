@@ -9,6 +9,17 @@ import (
 	"github.com/terraform-registry/terraform-registry/internal/db/repositories"
 )
 
+// @Summary      Network mirror provider version index
+// @Description  Returns all available versions for a provider in the Terraform Network Mirror Protocol format.
+// @Tags         Mirror Protocol
+// @Produce      json
+// @Param        hostname   path  string  true  "Origin registry hostname (e.g. registry.terraform.io)"
+// @Param        namespace  path  string  true  "Provider namespace"
+// @Param        type       path  string  true  "Provider type (e.g. aws, azurerm)"
+// @Success      200  {object}  map[string]interface{}  "versions: {\"1.0.0\": {}, \"2.0.0\": {}}"
+// @Failure      404  {object}  map[string]interface{}  "Provider not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /terraform/providers/{hostname}/{namespace}/{type}/index.json [get]
 // IndexHandler handles network mirror index requests
 // Implements: GET /terraform/providers/:hostname/:namespace/:type/index.json
 // Returns a simple JSON object with all available versions

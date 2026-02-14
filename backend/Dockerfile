@@ -5,6 +5,11 @@ FROM golang:alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
+RUN update-ca-certificates || true
+
+# Use default Go module proxy and sum DB (remove dev workarounds)
+# ENV GOPROXY=proxy.golang.org
+# ENV GOSUMDB=sum.golang.org
 
 # Set working directory
 WORKDIR /build
@@ -20,6 +25,10 @@ COPY . .
 
 # Tidy dependencies
 RUN go mod tidy
+
+# Install swag CLI and generate Swagger documentation (JSON only; embedded at build time)
+RUN go install github.com/swaggo/swag/cmd/swag@latest && \
+    swag init -g cmd/server/main.go --outputTypes json
 
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
@@ -46,6 +55,9 @@ COPY --from=builder /build/terraform-registry /app/terraform-registry
 # Copy example config
 COPY config.example.yaml /app/config.example.yaml
 
+# Copy Swagger documentation from builder
+COPY --from=builder /build/docs /app/docs
+
 # Create directories
 RUN mkdir -p /app/storage && \
     chown -R registry:registry /app
@@ -58,10 +70,11 @@ EXPOSE 8080 9090
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider --no-check-certificate https://localhost:8080/health || exit 1
 
 # Set entrypoint
 ENTRYPOINT ["/app/terraform-registry"]
 
 # Default command
 CMD ["serve"]
+

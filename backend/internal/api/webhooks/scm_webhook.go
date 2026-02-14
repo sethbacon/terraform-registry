@@ -29,6 +29,19 @@ func NewSCMWebhookHandler(scmRepo *repositories.SCMRepository, publisher *servic
 	}
 }
 
+// @Summary      Receive SCM webhook
+// @Description  Receives and processes incoming webhook events from SCM providers (GitHub, GitLab, Azure DevOps, Bitbucket). Validates the webhook signature, logs the event, and triggers auto-publish for tag push events when enabled.
+// @Tags         Webhooks
+// @Accept       json
+// @Produce      json
+// @Param        module_source_repo_id  path  string  true  "Module source repository link ID (UUID)"
+// @Param        secret                 path  string  true  "Webhook secret registered with the SCM provider"
+// @Success      200  {object}  map[string]interface{}  "message: webhook received, log_id: UUID"
+// @Failure      400  {object}  map[string]interface{}  "Invalid repository ID or malformed payload"
+// @Failure      401  {object}  map[string]interface{}  "Invalid webhook signature"
+// @Failure      404  {object}  map[string]interface{}  "Repository link or SCM provider not found"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /webhooks/scm/{module_source_repo_id}/{secret} [post]
 // HandleWebhook processes incoming webhooks from SCM providers
 // POST /webhooks/scm/:module_source_repo_id/:secret
 func (h *SCMWebhookHandler) HandleWebhook(c *gin.Context) {

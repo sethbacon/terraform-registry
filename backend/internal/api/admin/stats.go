@@ -44,15 +44,16 @@ type ProviderStats struct {
 	MirroredVersions int64 `json:"mirrored_versions"`
 }
 
+// @Summary      Get dashboard statistics
+// @Description  Returns aggregated statistics for the admin dashboard including module, provider, user, organization, download, and SCM provider counts.
+// @Tags         Stats
+// @Security     Bearer
+// @Produce      json
+// @Success      200  {object}  DashboardStats
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /api/v1/admin/stats/dashboard [get]
 // GetDashboardStats returns dashboard statistics
-// @Summary Get dashboard statistics
-// @Description Returns aggregated statistics for the admin dashboard
-// @Tags admin
-// @Security BearerAuth
-// @Produce json
-// @Success 200 {object} DashboardStats
-// @Failure 500 {object} ErrorResponse
-// @Router /api/v1/admin/stats/dashboard [get]
 func (h *StatsHandler) GetDashboardStats(c *gin.Context) {
 	var stats DashboardStats
 
